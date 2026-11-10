@@ -17,18 +17,22 @@ from backend.models import (
     Decision,
     DecisionRequest,
     FailureRequest,
+    FinishRunRequest,
     Handler,
     Instructions,
     Payment,
     PaymentRequest,
     Policy,
     PreviousClaim,
+    Run,
     Section,
     SectionTitle,
     SignOffRequest,
     StartRequest,
+    StartRunRequest,
     Step,
     StepRequest,
+    TodosRequest,
 )
 
 INSTRUCTIONS = Path(__file__).parent / "instructions"
@@ -111,6 +115,19 @@ def to_claim(row: sqlite3.Row) -> Claim:
             "payment": payment,
         }
     )
+
+
+def find_run(db: sqlite3.Connection, run_id: str) -> Run:
+    """Return one run, or raise a 404."""
+    row = db.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, f"Run {run_id} not found")
+    return to_run(row)
+
+
+def to_run(row: sqlite3.Row) -> Run:
+    """Build a run, with its to-do list, from its row."""
+    return Run(**dict(row) | {"todos": json.loads(row["todos"])})
 
 
 def add_step(
@@ -327,3 +344,48 @@ def fail_claim(claim_id: str, request: FailureRequest, db: Database) -> Claim:
         raise HTTPException(409, f"Claim {claim_id} is not in progress")
     fail(db, claim, request.error)
     return to_claim(find_claim(db, claim_id))
+
+
+@app.post("/api/runs", operation_id="start_run")
+def start_run(request: StartRunRequest, db: Database) -> Run:
+    """Start a run, first failing any claim a stopped run left in progress."""
+    if db.execute("SELECT 1 FROM runs WHERE run_id = ?", (request.run_id,)).fetchone():
+        raise HTTPException(409, f"Run {request.run_id} already exists")
+    for claim in db.execute(
+        "SELECT * FROM claims WHERE status = 'in_progress' ORDER BY claim_id"
+    ).fetchall():
+        fail(db, claim, "The run working this claim was stopped")
+    db.execute(
+        "INSERT INTO runs (run_id, cap, started_at, todos) VALUES (?, ?, ?, '[]')",
+        (request.run_id, request.cap, now()),
+    )
+    return find_run(db, request.run_id)
+
+
+@app.put("/api/runs/{run_id}/todos", operation_id="write_todos")
+def write_todos(run_id: str, request: TodosRequest, db: Database) -> Run:
+    """Replace a run's to-do list."""
+    find_run(db, run_id)
+    todos = json.dumps([todo.model_dump() for todo in request.todos])
+    db.execute("UPDATE runs SET todos = ? WHERE run_id = ?", (todos, run_id))
+    return find_run(db, run_id)
+
+
+@app.post("/api/runs/{run_id}/finish", operation_id="finish_run")
+def finish_run(run_id: str, request: FinishRunRequest, db: Database) -> Run:
+    """Finish a run with a short summary for the handlers."""
+    find_run(db, run_id)
+    db.execute(
+        "UPDATE runs SET finished_at = ?, summary = ? WHERE run_id = ?",
+        (now(), request.summary, run_id),
+    )
+    return find_run(db, run_id)
+
+
+@app.get("/api/runs/current", operation_id="get_current_run")
+def get_current_run(db: Database) -> Run | None:
+    """Get the latest run with its to-do list and summary, or null before the first."""
+    row = db.execute(
+        "SELECT * FROM runs ORDER BY started_at DESC, rowid DESC LIMIT 1"
+    ).fetchone()
+    return None if row is None else to_run(row)

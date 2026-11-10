@@ -5,6 +5,7 @@ export type Status =
   | "decided"
   | "left_for_handler";
 export type DecisionKind = "approve" | "decline" | "refer";
+export type TodoStatus = "to_do" | "in_progress" | "done" | "left_for_handler";
 export type StepKind =
   "tool_call" | "tool_result" | "message" | "read" | "error";
 
@@ -108,6 +109,20 @@ export interface Step {
   created_at: string;
 }
 
+export interface Todo {
+  content: string;
+  status: TodoStatus;
+}
+
+export interface Run {
+  run_id: string;
+  cap: number;
+  started_at: string;
+  finished_at: string | null;
+  todos: Todo[];
+  summary: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -152,6 +167,7 @@ export const api = {
     ),
   getInstructions: () => request<{ text: string }>("/api/instructions"),
   listHandlers: () => request<Handler[]>("/api/handlers"),
+  getCurrentRun: () => request<Run | null>("/api/runs/current"),
   signOff: (claimId: string, handlerId: string) =>
     post<Claim>(`${claimPath(claimId)}/sign-off`, { handler_id: handlerId }),
 };

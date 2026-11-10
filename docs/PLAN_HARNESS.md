@@ -60,13 +60,13 @@ New and changed operations. They follow the same rules as before: an `operation_
 | `start_run` | `POST /api/runs` | Body `{run_id, cap}`. Opens a run. Any claim still in progress is failed as above, with the error "The run working this claim was stopped" |
 | `write_todos` | `PUT /api/runs/{run_id}/todos` | Body `{todos}`, a list of `{content, status}`. Replaces the run's to-do list |
 | `finish_run` | `POST /api/runs/{run_id}/finish` | Body `{summary}`. Records the summary and the finish time |
-| `get_current_run` | `GET /api/runs/current` | The latest run, with its to-do list and summary |
+| `get_current_run` | `GET /api/runs/current` | The latest run, with its to-do list and summary, or null before the first run |
 | `get_instructions` | `GET /api/instructions` | Now `{queue, claim}`: the two sets of instructions, with no policy wording added |
 
 Rules the backend enforces:
 
 - `fail_claim` needs a claim in progress (409 otherwise). A decided claim can never be sent back to the queue, so it can't be decided twice. The existing rules still block a second decision or payment.
-- A to-do status is `to_do`, `in_progress`, `done` or `left_for_handler`, and its content can't be empty (422 for each). A run id that's already used returns 409. An unknown run, document or section returns 404, and so does `get_current_run` before the first run.
+- A to-do status is `to_do`, `in_progress`, `done` or `left_for_handler`, and its content can't be empty (422 for each). A run id that's already used returns 409. An unknown run, document or section returns 404. `get_current_run` returns null before the first run rather than a 404, because the dashboard stops refreshing on a 404, and a queue page opened before a run starts must still see it begin.
 
 ### The claim agent
 
@@ -188,16 +188,16 @@ Add `fail_claim`, the failure count, the `left_for_handler` state and `error` st
 
 Add the `runs` table and `start_run`, `write_todos`, `finish_run` and `get_current_run`. Add the Current run panel to the queue page. No agent changes yet. The e2e test stands in for the queue agent, as the pilot's tests stood in for the claim agent.
 
-- [ ] pytest: `start_run` opens a run, and the same run id again returns 409
-- [ ] pytest: `start_run` fails a claim left in progress. The claim goes back to `waiting` with an `error` step saying the run was stopped, or to `left_for_handler` on its second failure
-- [ ] pytest: `write_todos` replaces the list. An unknown status or empty content returns 422, and an unknown run returns 404
-- [ ] pytest: `finish_run` records the summary and finish time. `get_current_run` returns the latest run, and returns 404 before the first one
-- [ ] The OpenAPI test passes with the new operations
-- [ ] vitest: the panel with no run yet, with a running run whose items have each status chip, and with a finished run and its summary. With fake timers, it refreshes as the list changes
-- [ ] e2e: the test starts a run and writes three to-do items. Without a reload, the queue page shows them as To do, then one as In progress and one as Done, then the summary after `finish_run`
-- [ ] Browser, with `browser_evaluate`: each to-do chip has the color from the design. Screenshots of the panel in light and dark mode show rounded panels with no outlines
-- [ ] Browser: `browser_console_messages` shows no errors on the queue page, with or without a run
-- [ ] `npm run check` passes
+- [x] pytest: `start_run` opens a run, and the same run id again returns 409
+- [x] pytest: `start_run` fails a claim left in progress. The claim goes back to `waiting` with an `error` step saying the run was stopped, or to `left_for_handler` on its second failure
+- [x] pytest: `write_todos` replaces the list. An unknown status or empty content returns 422, and an unknown run returns 404
+- [x] pytest: `finish_run` records the summary and finish time. `get_current_run` returns the latest run, and null before the first one
+- [x] The OpenAPI test passes with the new operations
+- [x] vitest: the panel with no run yet, with a running run whose items have each status chip, and with a finished run and its summary. With fake timers, it refreshes as the list changes
+- [x] e2e: the test starts a run and writes three to-do items. Without a reload, the queue page shows them as To do, then one as In progress and one as Done, then the summary after `finish_run`
+- [x] Browser, with `browser_evaluate`: each to-do chip has the color from the design. Screenshots of the panel in light and dark mode show rounded panels with no outlines
+- [x] Browser: `browser_console_messages` shows no errors on the queue page, with or without a run
+- [x] `npm run check` passes
 
 ## Phase 4: The queue agent
 

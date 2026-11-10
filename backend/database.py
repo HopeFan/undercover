@@ -71,6 +71,14 @@ CREATE TABLE steps (
     content TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE runs (
+    run_id TEXT PRIMARY KEY,
+    cap INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    todos TEXT NOT NULL,
+    summary TEXT
+);
 CREATE VIEW claim_view AS
 SELECT
     claims.claim_id, claims.record, claims.status, claims.thread_id,

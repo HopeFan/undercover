@@ -30,6 +30,7 @@ it("shows the queue with counts by state", async () => {
       },
       { ...summary, claim_id: "CLM-1004", status: "left_for_handler" },
     ],
+    "GET /api/runs/current": null,
   });
   renderAt("/");
   const link = await screen.findByRole("link", { name: "CLM-1002" });

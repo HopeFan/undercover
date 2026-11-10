@@ -174,12 +174,14 @@ p {
 }
 
 .status-decided,
-.decision-approve {
+.decision-approve,
+.todo-done {
   background: var(--sea-green);
 }
 
 .status-in_progress,
-.decision-refer {
+.decision-refer,
+.todo-in_progress {
   background: var(--marigold);
 }
 
@@ -188,12 +190,14 @@ p {
   background: var(--coral);
 }
 
-.status-waiting {
+.status-waiting,
+.todo-to_do {
   background: var(--cerulean);
   color: #ffffff;
 }
 
 .status-left_for_handler,
+.todo-left_for_handler,
 .step-failed {
   background: var(--raspberry);
   color: #ffffff;
@@ -477,4 +481,32 @@ p {
 
 .step details[open] summary code {
   display: none;
+}
+
+.run {
+  margin-bottom: 20px;
+}
+
+.todos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.todos li {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.todos .chip {
+  justify-self: start;
+}
+
+.summary {
+  white-space: pre-wrap;
+  max-width: 80ch;
 }

@@ -8,6 +8,17 @@ async function send(request: APIRequestContext, path: string, data: object) {
   expect(response.ok()).toBe(true);
 }
 
+async function writeTodos(request: APIRequestContext, statuses: string[]) {
+  const todos = statuses.map((status, index) => ({
+    content: `Work CLM-101${String(index)}`,
+    status,
+  }));
+  const response = await request.put("/api/runs/e2e-run/todos", {
+    data: { todos },
+  });
+  expect(response.ok()).toBe(true);
+}
+
 test("the claim page shows the agent at work", async ({ page, request }) => {
   await page.goto("/claims/CLM-1003");
   const heading = page.locator(".claim-heading");
@@ -82,4 +93,40 @@ test("a handler signs off a payout over the limit", async ({
   await expect(
     page.getByText("Paid $1,350.00, signed off by Dana Whitfield"),
   ).toBeVisible();
+});
+
+// Starting a run fails any claim left in progress, so this test runs after the
+// others in this file, which run in order.
+test("the queue shows the agent's to-do list as it goes", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  const run = page.locator("section", {
+    has: page.getByRole("heading", { name: "Current run" }),
+  });
+  await expect(run.getByText(/No run yet/)).toBeVisible();
+
+  await send(request, "/api/runs", { run_id: "e2e-run", cap: 3 });
+  await writeTodos(request, ["to_do", "to_do", "to_do"]);
+  const items = run.getByRole("listitem");
+  await expect(items).toHaveText([
+    /To do\s*Work CLM-1010/,
+    /To do\s*Work CLM-1011/,
+    /To do\s*Work CLM-1012/,
+  ]);
+
+  await writeTodos(request, ["done", "in_progress", "to_do"]);
+  await expect(items).toHaveText([
+    /Done\s*Work CLM-1010/,
+    /In progress\s*Work CLM-1011/,
+    /To do\s*Work CLM-1012/,
+  ]);
+  await expect(run.getByText(/1 of 3 done/)).toBeVisible();
+
+  await send(request, "/api/runs/e2e-run/finish", {
+    summary: "Worked 3 claims.",
+  });
+  await expect(run.getByText("Worked 3 claims.")).toBeVisible();
+  await expect(run.getByText(/^Finished at/)).toBeVisible();
 });
