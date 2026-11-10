@@ -1,6 +1,6 @@
 # Status
 
-The claims pilot in `docs/PLAN.md` is built: all six phases are done. The harness in `docs/PLAN_HARNESS.md` is built: all five phases are done.
+The claims pilot in `docs/PLAN.md` is built: all six phases are done. The harness in `docs/PLAN_HARNESS.md` is built: all five phases are done. The refactor in `docs/PLAN_REFACTOR.md`, which answers the human review in `docs/HUMAN_REVIEW_HARNESS.md`, is in progress: phase 1 of 6, the standards and process, is done.
 
 ## Running it
 
