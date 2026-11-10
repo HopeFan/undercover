@@ -170,19 +170,19 @@ Seed the wording and the manual as sections. Add `list_sections` and `read_secti
 
 Add `fail_claim`, the failure count, the `left_for_handler` state and `error` steps. Add the claim agent's middleware and model timeout. Build `work_claim()`, and make `uv run -m agent CLM-1001` print its one line. On the dashboard, add the fifth state, the Failed steps and the decision panel's note for a claim left for a handler.
 
-- [ ] pytest: `fail_claim` on a claim in progress adds an `error` step, moves the claim to `waiting` and counts one failure. On the same claim's second failure it moves the claim to `left_for_handler`
-- [ ] pytest: `fail_claim` on a claim that's waiting, decided or waiting for sign-off returns 409 and changes nothing. `start_claim` on a claim left for a handler returns 409
-- [ ] Stub model test, failure and retry: the first attempt's stub raises an error after reading the claim. `work_claim` returns a line ending `Back in the queue.` and the claim is `waiting`. A second `work_claim` with a good stub decides it. The steps hold both attempts under two thread ids, with the `error` step between them
-- [ ] Stub model test, two failures: the claim is `left_for_handler` and the line ends `Left for a handler.`
-- [ ] Stub model test, a model call that fails once and then succeeds: `ModelRetryMiddleware` retries it, and the claim is decided with no failure recorded
-- [ ] Stub model test: a stub that never stops calling tools is stopped by the call limit and counted as a failure
-- [ ] Stub model test, failure after the decision: the stub approves $420.00 and then raises. The claim stays `decided` with one decision, and the harness pays $420.00 once. A further `work_claim` on it returns a line saying it isn't waiting, and nothing changes
-- [ ] Stub model test: a stub that finishes without recording a decision counts as a failure
-- [ ] `uv run -m agent CLM-1001` prints the one line from `work_claim` (tested with `work_claim` stubbed)
-- [ ] vitest: the Left for a handler tile and chip, a Failed step, and the decision panel's note for a claim left for a handler
-- [ ] Browser, with `browser_evaluate`: the Left for a handler chip has the Raspberry background `#EF476F` and white text
-- [ ] Live: on a fresh database, `uv run -m agent CLM-1001` prints one line with the decision and payout
-- [ ] `npm run check` passes
+- [x] pytest: `fail_claim` on a claim in progress adds an `error` step, moves the claim to `waiting` and counts one failure. On the same claim's second failure it moves the claim to `left_for_handler`
+- [x] pytest: `fail_claim` on a claim that's waiting, decided or waiting for sign-off returns 409 and changes nothing. `start_claim` on a claim left for a handler returns 409
+- [x] Stub model test, failure and retry: the first attempt's stub raises an error after reading the claim. `work_claim` returns a line ending `Back in the queue.` and the claim is `waiting`. A second `work_claim` with a good stub decides it. The steps hold both attempts under two thread ids, with the `error` step between them
+- [x] Stub model test, two failures: the claim is `left_for_handler` and the line ends `Left for a handler.`
+- [x] Stub model test, a model call that fails once and then succeeds: `ModelRetryMiddleware` retries it, and the claim is decided with no failure recorded
+- [x] Stub model test: a stub that never stops calling tools is stopped by the call limit and counted as a failure
+- [x] Stub model test, failure after the decision: the stub approves $420.00 and then raises. The claim stays `decided` with one decision, and the harness pays $420.00 once. A further `work_claim` on it returns a line saying it isn't waiting, and nothing changes
+- [x] Stub model test: a stub that finishes without recording a decision counts as a failure
+- [x] `uv run -m agent CLM-1001` prints the one line from `work_claim` (tested with `work_claim` stubbed)
+- [x] vitest: the Left for a handler tile and chip, a Failed step, and the decision panel's note for a claim left for a handler
+- [x] Browser, with `browser_evaluate`: the Left for a handler chip has the Raspberry background `#EF476F` and white text
+- [x] Live: on a fresh database, `uv run -m agent CLM-1001` prints one line with the decision and payout
+- [x] `npm run check` passes
 
 ## Phase 3: Runs and the to-do list on the queue page
 

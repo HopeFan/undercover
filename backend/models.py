@@ -4,9 +4,11 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
-Status = Literal["waiting", "in_progress", "waiting_for_sign_off", "decided"]
+Status = Literal[
+    "waiting", "in_progress", "waiting_for_sign_off", "decided", "left_for_handler"
+]
 DecisionKind = Literal["approve", "decline", "refer"]
-StepKind = Literal["tool_call", "tool_result", "message", "read"]
+StepKind = Literal["tool_call", "tool_result", "message", "read", "error"]
 
 
 class Item(BaseModel):
@@ -164,3 +166,7 @@ class PaymentRequest(BaseModel):
 
 class SignOffRequest(BaseModel):
     handler_id: str
+
+
+class FailureRequest(BaseModel):
+    error: str = Field(min_length=1, description="What went wrong")

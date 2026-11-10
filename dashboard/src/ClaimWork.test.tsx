@@ -61,6 +61,13 @@ const steps: Step[] = [
   {
     step_id: 4,
     thread_id: "t-1",
+    kind: "error",
+    content: "The model is unavailable",
+    created_at: decidedAt,
+  },
+  {
+    step_id: 5,
+    thread_id: "t-2",
     kind: "message",
     content: "Approved and paid.",
     created_at: decidedAt,
@@ -176,7 +183,22 @@ it("shows each kind of step, with results folded", async () => {
   expect(read?.querySelector("pre")?.textContent).toBe(
     "Before deciding any claim.\n\nMost third claims are paid.",
   );
+  const failed = screen.getByText("Failed");
+  expect(failed.className).toContain("step-failed");
+  expect(failed.closest("p")?.textContent).toBe(
+    "Failed The model is unavailable",
+  );
   expect(screen.getByText("Approved and paid.")).toBeDefined();
+});
+
+it("says when a claim is left for a handler", async () => {
+  showClaim({ ...claim, status: "left_for_handler", thread_id: "t-2" });
+  const panel = await decisionPanel();
+  expect(
+    panel.getByText(
+      "The agent failed on this claim twice, so it's left for a handler.",
+    ),
+  ).toBeDefined();
 });
 
 it("shows new steps and the decision as the agent works", async () => {

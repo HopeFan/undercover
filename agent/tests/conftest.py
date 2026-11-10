@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,3 +14,9 @@ __all__ = ["client", "database"]
 def backend(monkeypatch):
     """Send the agent's requests to the test backend."""
     monkeypatch.setattr(tools, "backend", lambda: TestClient(app))
+
+
+@pytest.fixture(autouse=True)
+def no_waiting(monkeypatch):
+    """Let the retry middleware retry at once instead of waiting."""
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)

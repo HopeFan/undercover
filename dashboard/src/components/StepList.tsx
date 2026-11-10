@@ -43,6 +43,12 @@ function StepBody({ step }: Readonly<{ step: Step }>) {
         <code className="mono">{step.content}</code>
       </p>
     );
+  if (step.kind === "error")
+    return (
+      <p>
+        <span className="chip step-failed">Failed</span> {step.content}
+      </p>
+    );
   if (step.kind === "read") {
     const [heading, ...text] = step.content.split("\n\n");
     return (

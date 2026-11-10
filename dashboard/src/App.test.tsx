@@ -28,6 +28,7 @@ it("shows the queue with counts by state", async () => {
         decision: "approve",
         payout: 420,
       },
+      { ...summary, claim_id: "CLM-1004", status: "left_for_handler" },
     ],
   });
   renderAt("/");
@@ -36,11 +37,14 @@ it("shows the queue with counts by state", async () => {
   expect(screen.getByLabelText("Waiting: 1")).toBeDefined();
   expect(screen.getByLabelText("Decided: 1")).toBeDefined();
   expect(screen.getByLabelText("In progress: 0")).toBeDefined();
+  expect(screen.getByLabelText("Left for a handler: 1")).toBeDefined();
+  const left = screen.getByRole("row", { name: /CLM-1004/ });
+  expect(within(left).getByText("Left for a handler")).toBeDefined();
   const row = screen.getByRole("row", { name: /CLM-1003/ });
   expect(within(row).getByText("Approved")).toBeDefined();
   expect(within(row).getByText("$420.00")).toBeDefined();
-  expect(screen.getAllByText("$1,150.00")).toHaveLength(2);
-  expect(screen.getAllByText("Jul 20, 2026")).toHaveLength(2);
+  expect(screen.getAllByText("$1,150.00")).toHaveLength(3);
+  expect(screen.getAllByText("Jul 20, 2026")).toHaveLength(3);
 });
 
 it("shows an error when the queue can't load", async () => {

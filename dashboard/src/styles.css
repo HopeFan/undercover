@@ -193,6 +193,12 @@ p {
   color: #ffffff;
 }
 
+.status-left_for_handler,
+.step-failed {
+  background: var(--raspberry);
+  color: #ffffff;
+}
+
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

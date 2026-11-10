@@ -16,6 +16,7 @@ from backend.models import (
     ClaimSummary,
     Decision,
     DecisionRequest,
+    FailureRequest,
     Handler,
     Instructions,
     Payment,
@@ -31,6 +32,7 @@ from backend.models import (
 )
 
 INSTRUCTIONS = Path(__file__).parent / "instructions"
+ATTEMPTS = 2
 
 
 @asynccontextmanager
@@ -108,6 +110,29 @@ def to_claim(row: sqlite3.Row) -> Claim:
             "decision": decision,
             "payment": payment,
         }
+    )
+
+
+def add_step(
+    db: sqlite3.Connection, claim_id: str, thread_id: str, kind: str, content: str
+) -> Step:
+    """Record one step of the agent's work on a claim."""
+    row = db.execute(
+        "INSERT INTO steps (claim_id, thread_id, kind, content, created_at)"
+        " VALUES (?, ?, ?, ?, ?) RETURNING *",
+        (claim_id, thread_id, kind, content, now()),
+    ).fetchone()
+    return Step(**dict(row))
+
+
+def fail(db: sqlite3.Connection, claim: sqlite3.Row, error: str) -> None:
+    """Send a claim in progress back to the queue, or leave it for a handler."""
+    add_step(db, claim["claim_id"], claim["thread_id"], "error", error)
+    db.execute(
+        "UPDATE claims SET failures = failures + 1,"
+        " status = IIF(failures + 1 < ?, 'waiting', 'left_for_handler')"
+        " WHERE claim_id = ?",
+        (ATTEMPTS, claim["claim_id"]),
     )
 
 
@@ -221,12 +246,7 @@ def record_step(claim_id: str, request: StepRequest, db: Database) -> Step:
     thread_id = find_claim(db, claim_id)["thread_id"]
     if thread_id is None:
         raise HTTPException(409, f"Claim {claim_id} has not been started")
-    row = db.execute(
-        "INSERT INTO steps (claim_id, thread_id, kind, content, created_at)"
-        " VALUES (?, ?, ?, ?, ?) RETURNING *",
-        (claim_id, thread_id, request.kind, request.content, now()),
-    ).fetchone()
-    return Step(**dict(row))
+    return add_step(db, claim_id, thread_id, request.kind, request.content)
 
 
 @app.get("/api/claims/{claim_id}/steps", operation_id="list_steps")
@@ -296,4 +316,14 @@ def sign_off_claim(claim_id: str, request: SignOffRequest, db: Database) -> Clai
         )
     pay(db, claim_id, claim["payout"], handler.name)
     db.execute("UPDATE claims SET status = 'decided' WHERE claim_id = ?", (claim_id,))
+    return to_claim(find_claim(db, claim_id))
+
+
+@app.post("/api/claims/{claim_id}/failure", operation_id="fail_claim")
+def fail_claim(claim_id: str, request: FailureRequest, db: Database) -> Claim:
+    """Record a failed attempt: the claim goes back in the queue, or to a handler."""
+    claim = find_claim(db, claim_id)
+    if claim["status"] != "in_progress":
+        raise HTTPException(409, f"Claim {claim_id} is not in progress")
+    fail(db, claim, request.error)
     return to_claim(find_claim(db, claim_id))

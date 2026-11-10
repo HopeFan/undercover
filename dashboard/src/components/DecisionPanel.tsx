@@ -3,6 +3,13 @@ import { money, time } from "../format";
 import { DecisionChip } from "./Chips";
 import { SignOffForm } from "./SignOffForm";
 
+const progress: Partial<Record<Claim["status"], string>> = {
+  waiting: "The agent hasn't started on this claim.",
+  in_progress: "The agent is working on this claim.",
+  left_for_handler:
+    "The agent failed on this claim twice, so it's left for a handler.",
+};
+
 export function DecisionPanel({
   claim,
   onSignedOff,
@@ -12,13 +19,7 @@ export function DecisionPanel({
   return (
     <section className="panel" aria-labelledby="decision-title">
       <h2 id="decision-title">Decision</h2>
-      {!decision && (
-        <p className="muted">
-          {claim.status === "in_progress"
-            ? "The agent is working on this claim."
-            : "The agent hasn't started on this claim."}
-        </p>
-      )}
+      {!decision && <p className="muted">{progress[claim.status]}</p>}
       {decision && (
         <>
           <div className="decision-line">
