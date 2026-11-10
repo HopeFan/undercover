@@ -203,18 +203,18 @@ Add the `runs` table and `start_run`, `write_todos`, `finish_run` and `get_curre
 
 Build the queue agent in `agent/queue.py` with its three tools, middleware, the cap, the missed-claims check and the summary. Write `backend/instructions/queue.md`, and change `get_instructions` to `{queue, claim}`, with the instructions page showing both. Add `--cap` to the command line.
 
-- [ ] A pytest test checks that the queue agent's tools are exactly `list_claims`, `write_todos` and `work_claim`
-- [ ] Stub model test, the to-do list stored: the queue stub writes a list, works its claims and updates the list. `get_current_run` holds each version as it is written, and finally every item is `done`
-- [ ] Stub model test, the cap: with a cap of 2, the stub's third `work_claim` is refused with the cap message. That claim stays `waiting`, and the run shows cap 2
-- [ ] Stub model test, a failed claim doesn't stop the run: the claim stub raises on CLM-1002. CLM-1001 and CLM-1003 are still decided, and the run finishes with a summary
-- [ ] Stub model test, back in the queue and tried again: CLM-1002 fails once, the queue stub calls `work_claim` on it again, and it's decided
-- [ ] Stub model test, two failures: CLM-1002 is `left_for_handler`, and its to-do item is `left_for_handler`
-- [ ] Stub model test, the missed-claims check: with a cap of 2, the stub replies after working one claim. The harness's reminder names one waiting claim, the stub works it, and the claim is decided. A claim beyond the cap stays `waiting`. With nothing missed, no reminder is sent, and after two reminders the run finishes anyway
-- [ ] `uv run -m agent --cap 5` prints a line per claim, then the summary (tested with stubs)
-- [ ] `curl -s localhost:8000/api/instructions` returns `queue` and `claim`
-- [ ] vitest and e2e: the instructions page shows Running the queue and Working a claim
-- [ ] `grep -rn evals backend agent dashboard/src` finds nothing
-- [ ] `npm run check` passes
+- [x] A pytest test checks that the queue agent's tools are exactly `list_claims`, `write_todos` and `work_claim`
+- [x] Stub model test, the to-do list stored: the queue stub writes a list, works its claims and updates the list. `get_current_run` holds each version as it is written, and finally every item is `done`
+- [x] Stub model test, the cap: with a cap of 2, the stub's third `work_claim` is refused with the cap message. That claim stays `waiting`, and the run shows cap 2
+- [x] Stub model test, a failed claim doesn't stop the run: the claim stub raises on CLM-1002. CLM-1001 and CLM-1003 are still decided, and the run finishes with a summary
+- [x] Stub model test, back in the queue and tried again: CLM-1002 fails once, the queue stub calls `work_claim` on it again, and it's decided
+- [x] Stub model test, two failures: CLM-1002 is `left_for_handler`, and its to-do item is `left_for_handler`
+- [x] Stub model test, the missed-claims check: with a cap of 2, the stub replies after working one claim. The harness's reminder names one waiting claim, the stub works it, and the claim is decided. A claim beyond the cap stays `waiting`. With nothing missed, no reminder is sent, and after two reminders the run finishes anyway
+- [x] `uv run -m agent --cap 5` prints a line per claim, then the summary (tested with stubs)
+- [x] `curl -s localhost:8000/api/instructions` returns `queue` and `claim`
+- [x] vitest and e2e: the instructions page shows Running the queue and Working a claim
+- [x] `grep -rn evals backend agent dashboard/src` finds nothing
+- [x] `npm run check` passes
 
 ## Phase 5: A live trial and the docs
 

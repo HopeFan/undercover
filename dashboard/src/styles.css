@@ -510,3 +510,7 @@ p {
   white-space: pre-wrap;
   max-width: 80ch;
 }
+
+.instructions-panel + .instructions-panel {
+  margin-top: 20px;
+}

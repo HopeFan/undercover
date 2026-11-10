@@ -210,8 +210,11 @@ def get_claim_history(customer_id: str, db: Database) -> list[PreviousClaim]:
 
 @app.get("/api/instructions", operation_id="get_instructions")
 def get_instructions() -> Instructions:
-    """Get the agent's instructions for working a claim."""
-    return Instructions(text=(INSTRUCTIONS / "claim.md").read_text(encoding="utf-8"))
+    """Get the agent's instructions for running the queue and for working a claim."""
+    return Instructions(
+        queue=(INSTRUCTIONS / "queue.md").read_text(encoding="utf-8"),
+        claim=(INSTRUCTIONS / "claim.md").read_text(encoding="utf-8"),
+    )
 
 
 @app.get("/api/documents/{document}/sections", operation_id="list_sections")

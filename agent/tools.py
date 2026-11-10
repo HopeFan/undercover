@@ -32,6 +32,12 @@ def reply(response: httpx.Response) -> str:
 
 
 @tool
+def list_claims() -> str:
+    """List every claim in the queue, in id order."""
+    return reply(request("GET", "/api/claims"))
+
+
+@tool
 def get_claim(claim_id: str) -> str:
     """Get one claim in full: the story, the items claimed and the documents."""
     return reply(request("GET", f"/api/claims/{claim_id}"))

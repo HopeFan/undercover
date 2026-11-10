@@ -81,7 +81,7 @@ def steps(message: AnyMessage) -> list[tuple[str, str]]:
 def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     """Work one claim, recording each step with the backend, and return the reply."""
     call_backend("POST", f"/api/claims/{claim_id}/start", {"thread_id": thread_id})
-    instructions = call_backend("GET", "/api/instructions")["text"]
+    instructions = call_backend("GET", "/api/instructions")["claim"]
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         ModelRetryMiddleware(max_retries=3, on_failure="error"),
         ToolRetryMiddleware(max_retries=2, on_failure="error"),
@@ -157,10 +157,3 @@ def work_claim(claim_id: str, llm: BaseChatModel | None = None) -> str:
         call_backend("POST", f"{path}/steps", {"kind": "error", "content": error})
     settle(claim)
     return report(claim)
-
-
-def work_queue() -> None:
-    """Work every waiting claim in queue order, printing a line for each."""
-    for claim in call_backend("GET", "/api/claims"):
-        if claim["status"] == "waiting":
-            print(work_claim(claim["claim_id"]), flush=True)

@@ -43,8 +43,10 @@ def test_unknown_documents_and_sections(client, path):
     assert client.get(path).status_code == 404
 
 
-def test_instructions_are_for_working_a_claim(client):
-    text = client.get("/api/instructions").json()["text"]
-    assert text.startswith("# UnderCover Agent: working a claim")
-    assert "read_section" in text
-    assert "# UnderCover Travel Insurance: Policy Wording" not in text
+def test_instructions_for_the_queue_and_a_claim(client):
+    instructions = client.get("/api/instructions").json()
+    assert instructions["queue"].startswith("# UnderCover Agent: running the queue")
+    assert instructions["claim"].startswith("# UnderCover Agent: working a claim")
+    assert "read_section" in instructions["claim"]
+    for text in instructions.values():
+        assert "# UnderCover Travel Insurance: Policy Wording" not in text
