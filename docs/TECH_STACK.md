@@ -1,7 +1,7 @@
 # Tech stack
 
 - `backend/`: FastAPI and SQLite. Every API operation has an `operation_id`, a one-line docstring and no optional inputs. Paying a claim is a separate operation that takes the amount.
-- `agent/`: LangChain's `create_agent` on OpenRouter, with one entry point that takes a claim id and a thread id. It reaches claims, its instructions, the policy wording and the claims manual only through the backend's API. It uses `deepseek/deepseek-v4.1-flash` with low reasoning effort by default, or the model in the environment variable `MODEL_NAME` if set, such as `openrouter/free`.
+- `agent/`: LangChain's `create_agent` on OpenRouter, with LangChain's built-in middleware for retries and call limits, and no other agent framework. A queue agent works a run and hands each claim to a claim agent on a fresh thread. There are two entry points: `work_queue(cap)` for a run and `work_claim(claim_id)` for one claim. It reaches claims, runs, its instructions, the policy wording and the claims manual only through the backend's API. It uses `deepseek/deepseek-v4.1-flash` with low reasoning effort by default, or the model in the environment variable `MODEL_NAME` if set, such as `openrouter/free`.
 - `dashboard/`: React, Vite and TypeScript.
 - `e2e/`: Playwright tests.
 - `data/`: the business data the backend starts from. The agent never sees `data/evals/`, which holds the answer key.

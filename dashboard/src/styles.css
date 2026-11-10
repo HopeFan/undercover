@@ -506,6 +506,10 @@ p {
   justify-self: start;
 }
 
+.run h3 {
+  margin-top: 16px;
+}
+
 .summary {
   white-space: pre-wrap;
   max-width: 80ch;

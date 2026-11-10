@@ -1,6 +1,6 @@
 # Status
 
-The claims pilot in `docs/PLAN.md` is built: all six phases are done. The harness in `docs/PLAN_HARNESS.md` is being built: phases 1 to 4 of 5 are done.
+The claims pilot in `docs/PLAN.md` is built: all six phases are done. The harness in `docs/PLAN_HARNESS.md` is built: all five phases are done.
 
 ## Running it
 
@@ -17,6 +17,8 @@ The claims pilot in `docs/PLAN.md` is built: all six phases are done. The harnes
 
 ## Last live runs
 
-On September 27, 2026, `uv run -m agent` with `openai/gpt-6-luna` worked all 25 claims in 2 minutes 47 seconds: 17 approve, 5 decline and 3 refer. Three approvals were over $1,000 and waited for sign-off (CLM-1003, CLM-1008 and CLM-1011), and every other approval was paid its payout. These decisions have not yet been scored against the handlers' decisions in `data/evals/`.
+On November 10, 2026, after reseeding, `uv run -m agent --cap 5` with `deepseek/deepseek-v4.1-flash` worked five claims on its own in 3 minutes 15 seconds, and left the other 20 waiting. The queue agent chose the five oldest by submission date and planned them as a to-do list, which the queue page showed filling in and being ticked off. The run approved CLM-1001 for $420.00, which was paid. It approved CLM-1008 for $2,240.00 and CLM-1011 for $1,150.00, which wait for sign-off with no payment, referred CLM-1018 and declined CLM-1010. Each claim agent read 7 to 13 sections of the wording and the manual, shown as Read steps on its claim page. No claim failed. Two earlier trials that day decided the same five claims in the same way, in 91 and 124 seconds. They led to two changes to the queue instructions, so that its summary is one plain paragraph for the handlers and a referral is not described as left for a handler. These decisions have not been scored against the handlers' decisions in `data/evals/`.
 
-On November 10, 2026, `uv run -m agent CLM-1020` with `deepseek/deepseek-v4.1-flash` worked the claim in 48 seconds. It read four sections of the wording and five of the manual, including the manual's interpretation notes, and approved $240.00, which was paid. The same day, `uv run -m agent CLM-1001` printed `CLM-1001  approve  $420.00` in 17 seconds.
+The same day, `uv run -m agent CLM-1020` worked one claim in 48 seconds. It read four sections of the wording and five of the manual, including the interpretation notes on wild animals, and approved $240.00, which was paid.
+
+On September 27, 2026, the pilot's `uv run -m agent` with `openai/gpt-6-luna` worked all 25 claims in 2 minutes 47 seconds: 17 approve, 5 decline and 3 refer.

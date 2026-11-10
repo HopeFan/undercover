@@ -220,13 +220,13 @@ Build the queue agent in `agent/queue.py` with its three tools, middleware, the 
 
 Run the brief's trial and bring the docs up to date.
 
-- [ ] Live: after `uv run -m backend.seed`, with the queue page open, `uv run -m agent --cap 5` works five claims on the default model with no help
-- [ ] Live, in the browser: snapshots taken during the run show the to-do list filling in and being ticked off. At the end, the Current run panel shows the summary
-- [ ] Live: afterwards, `curl -s localhost:8000/api/claims` shows five claims worked and 20 still `waiting`, with none `in_progress`
-- [ ] Live: every approval within the limit is paid exactly its payout, once, and every approval over $1,000 is `waiting_for_sign_off` with no payment
-- [ ] Live, in the browser: each of the five claim pages shows its steps, including Read steps for the sections the agent read
-- [ ] `docs/SPEC.md`, `docs/TECH_STACK.md` and `docs/STATUS.md` describe the product as it now is. `STATUS.md` records the trial's time and outcomes
-- [ ] `npm run check` passes
+- [x] Live: after `uv run -m backend.seed`, with the queue page open, `uv run -m agent --cap 5` works five claims on the default model with no help
+- [x] Live, in the browser: snapshots taken during the run show the to-do list filling in and being ticked off. At the end, the Current run panel shows the summary
+- [x] Live: afterwards, `curl -s localhost:8000/api/claims` shows five claims worked and 20 still `waiting`, with none `in_progress`
+- [x] Live: every approval within the limit is paid exactly its payout, once, and every approval over $1,000 is `waiting_for_sign_off` with no payment
+- [x] Live, in the browser: each of the five claim pages shows its steps, including Read steps for the sections the agent read
+- [x] `docs/SPEC.md`, `docs/TECH_STACK.md` and `docs/STATUS.md` describe the product as it now is. `STATUS.md` records the trial's time and outcomes
+- [x] `npm run check` passes
 
 ## Not in this plan
 
