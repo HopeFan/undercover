@@ -53,6 +53,14 @@ const steps: Step[] = [
   {
     step_id: 3,
     thread_id: "t-1",
+    kind: "read",
+    content:
+      "Claims manual, section 9: Repeat claims\n\nBefore deciding any claim.\n\nMost third claims are paid.",
+    created_at: decidedAt,
+  },
+  {
+    step_id: 4,
+    thread_id: "t-1",
     kind: "message",
     content: "Approved and paid.",
     created_at: decidedAt,
@@ -158,6 +166,16 @@ it("shows each kind of step, with results folded", async () => {
   expect(result?.open).toBe(false);
   expect(result?.querySelector("summary")?.textContent).toMatch(/\.\.\.$/);
   expect(result?.querySelector("pre")?.textContent).toBe(steps[1].content);
+  const read = screen
+    .getByText("Claims manual, section 9: Repeat claims", { exact: false })
+    .closest("details");
+  expect(read?.open).toBe(false);
+  expect(read?.querySelector("summary")?.textContent).toBe(
+    "Read Claims manual, section 9: Repeat claims",
+  );
+  expect(read?.querySelector("pre")?.textContent).toBe(
+    "Before deciding any claim.\n\nMost third claims are paid.",
+  );
   expect(screen.getByText("Approved and paid.")).toBeDefined();
 });
 

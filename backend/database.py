@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -9,11 +10,21 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
+DOCUMENTS = {
+    "policy_wording": "policy_wording.md",
+    "claims_manual": "claims_manual.md",
+}
 
 SCHEMA = """
 CREATE TABLE settings (
-    payout_approval_limit REAL NOT NULL,
-    policy_wording TEXT NOT NULL
+    payout_approval_limit REAL NOT NULL
+);
+CREATE TABLE sections (
+    document TEXT NOT NULL,
+    section INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    PRIMARY KEY (document, section)
 );
 CREATE TABLE handlers (
     handler_id TEXT PRIMARY KEY,
@@ -90,6 +101,16 @@ def load(name: str) -> Any:
     return json.loads((DATA / name).read_text(encoding="utf-8"))
 
 
+def split_sections(text: str) -> list[tuple[int, str, str]]:
+    """Split a document at its "## 1. Title" headings into numbered sections."""
+    sections = []
+    for part in re.split(r"^## ", text, flags=re.MULTILINE)[1:]:
+        heading, _, body = part.partition("\n")
+        number, _, title = heading.partition(". ")
+        sections.append((int(number), title.strip(), body.strip()))
+    return sections
+
+
 def seed(path: Path) -> dict[str, int]:
     """Build a fresh database at path from data/ and count what it holds."""
     company = load("company.json")
@@ -97,14 +118,18 @@ def seed(path: Path) -> dict[str, int]:
     customers = load("customers.json")
     policies = load("policies.json")
     claims = load("claims.json")
-    wording = (DATA / "policy_wording.md").read_text(encoding="utf-8")
+    sections = [
+        (document, *section)
+        for document, name in DOCUMENTS.items()
+        for section in split_sections((DATA / name).read_text(encoding="utf-8"))
+    ]
     path.unlink(missing_ok=True)
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.executescript(SCHEMA)
         connection.execute(
-            "INSERT INTO settings VALUES (?, ?)",
-            (company["payout_approval_limit"], wording),
+            "INSERT INTO settings VALUES (?)", (company["payout_approval_limit"],)
         )
+        connection.executemany("INSERT INTO sections VALUES (?, ?, ?, ?)", sections)
         connection.executemany(
             "INSERT INTO handlers VALUES (?, ?, ?, ?)",
             [

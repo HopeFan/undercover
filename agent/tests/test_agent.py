@@ -59,16 +59,12 @@ def test_tools_are_named_after_backend_operations(client):
         "get_claim",
         "get_policy",
         "get_claim_history",
+        "list_sections",
+        "read_section",
         "record_decision",
         "pay_claim",
     ]
     assert set(names) <= operations
-
-
-def test_get_instructions(client):
-    text = client.get("/api/instructions").json()["text"]
-    assert text.startswith("# UnderCover Agent")
-    assert "## 10. How we work out your payment" in text
 
 
 def test_run_approves_and_pays_within_the_limit(client):
@@ -144,6 +140,40 @@ def test_run_declines_and_refers(client, decision):
     assert claim["payment"] is None
 
 
+def test_run_records_the_sections_it_reads(client):
+    stub = StubModel(
+        messages=iter(
+            [
+                call("list_sections", document="claims_manual"),
+                call("read_section", document="claims_manual", section=9),
+                call("read_section", document="claims_manual", section=99),
+                call(
+                    "record_decision",
+                    claim_id="CLM-1003",
+                    decision="refer",
+                    payout=0,
+                    section="Claims manual, section 9, Repeat claims",
+                    reason="This is the customer's third claim in 12 months.",
+                ),
+                AIMessage(content="Referred, $0.00"),
+            ]
+        )
+    )
+    main.run("CLM-1003", "thread-5", stub)
+
+    steps = client.get("/api/claims/CLM-1003/steps").json()
+    reads = [s for s in steps if s["kind"] == "read"]
+    assert len(reads) == 1
+    heading, _, text = reads[0]["content"].partition("\n\n")
+    assert heading == "Claims manual, section 9: Repeat claims"
+    assert text.startswith("Before deciding any claim")
+    assert steps[1]["content"].startswith('list_sections: [{"section":1')
+    refusal = steps[5]
+    assert refusal["kind"] == "tool_result"
+    assert refusal["content"].startswith("read_section: Refused with status 404")
+    assert client.get("/api/claims/CLM-1003").json()["status"] == "decided"
+
+
 def test_run_needs_a_waiting_claim():
     main.run(
         "CLM-1003", "thread-3", script("CLM-1003", "POL-2003", "CUS-3003", "refer", 0)
@@ -168,6 +198,9 @@ def test_command_line(monkeypatch, capsys):
 def test_model_name(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.delenv("MODEL_NAME", raising=False)
-    assert main.model().model_name == "openai/gpt-6-luna"
+    default = main.model()
+    assert default.model_name == "deepseek/deepseek-v4.1-flash"
+    assert default.reasoning_effort == "low"
     monkeypatch.setenv("MODEL_NAME", "openrouter/free")
     assert main.model().model_name == "openrouter/free"
+    assert main.model().reasoning_effort is None

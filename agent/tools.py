@@ -6,6 +6,9 @@ import httpx
 from langchain_core.tools import tool
 
 BACKEND_URL = "http://localhost:8000"
+REFUSED = "Refused with status"
+
+Document = Literal["policy_wording", "claims_manual"]
 
 
 def backend() -> httpx.Client:
@@ -25,7 +28,7 @@ def reply(response: httpx.Response) -> str:
     """Give the model the backend's answer, or its reason for refusing."""
     if response.is_success:
         return response.text
-    return f"Refused with status {response.status_code}: {response.text}"
+    return f"{REFUSED} {response.status_code}: {response.text}"
 
 
 @tool
@@ -44,6 +47,18 @@ def get_policy(policy_id: str) -> str:
 def get_claim_history(customer_id: str) -> str:
     """Get a customer's earlier claims, with the outcome and the amount paid."""
     return reply(request("GET", f"/api/customers/{customer_id}/claims"))
+
+
+@tool
+def list_sections(document: Document) -> str:
+    """List the numbered sections of the policy wording or the claims manual."""
+    return reply(request("GET", f"/api/documents/{document}/sections"))
+
+
+@tool
+def read_section(document: Document, section: int) -> str:
+    """Read one numbered section of the policy wording or the claims manual."""
+    return reply(request("GET", f"/api/documents/{document}/sections/{section}"))
 
 
 @tool
@@ -70,4 +85,12 @@ def pay_claim(claim_id: str, amount: float) -> str:
     return reply(request("POST", f"/api/claims/{claim_id}/payment", {"amount": amount}))
 
 
-TOOLS = [get_claim, get_policy, get_claim_history, record_decision, pay_claim]
+TOOLS = [
+    get_claim,
+    get_policy,
+    get_claim_history,
+    list_sections,
+    read_section,
+    record_decision,
+    pay_claim,
+]

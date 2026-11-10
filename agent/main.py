@@ -14,16 +14,17 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import SecretStr
 
-from agent.tools import TOOLS, request
+from agent.tools import REFUSED, TOOLS, request
 
 load_dotenv(override=True)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "openai/gpt-6-luna"
+DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
+DOCUMENT_NAMES = {"policy_wording": "Policy wording", "claims_manual": "Claims manual"}
 
 
 def model() -> ChatOpenAI:
-    """Return the model named in MODEL_NAME, or GPT-6 Luna by default."""
+    """Return the model named in MODEL_NAME, or DeepSeek V4.1 Flash by default."""
     name = os.getenv("MODEL_NAME")
     return ChatOpenAI(
         model=name or DEFAULT_MODEL,
@@ -45,9 +46,19 @@ def call_backend(method: str, path: str, body: dict[str, Any] | None = None) -> 
     return response.json()
 
 
+def read_step(section: dict[str, Any]) -> str:
+    """Name a section the agent read, followed by its text."""
+    name = DOCUMENT_NAMES[section["document"]]
+    return (
+        f"{name}, section {section['section']}: {section['title']}\n\n{section['text']}"
+    )
+
+
 def steps(message: AnyMessage) -> list[tuple[str, str]]:
     """Turn one message from the agent's run into steps for the dashboard."""
     if isinstance(message, ToolMessage):
+        if message.name == "read_section" and not message.text.startswith(REFUSED):
+            return [("read", read_step(json.loads(message.text)))]
         return [("tool_result", f"{message.name}: {message.text}")]
     found = []
     if message.text:

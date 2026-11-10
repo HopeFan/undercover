@@ -22,13 +22,15 @@ from backend.models import (
     PaymentRequest,
     Policy,
     PreviousClaim,
+    Section,
+    SectionTitle,
     SignOffRequest,
     StartRequest,
     Step,
     StepRequest,
 )
 
-INSTRUCTIONS = Path(__file__).parent / "instructions.md"
+INSTRUCTIONS = Path(__file__).parent / "instructions"
 
 
 @asynccontextmanager
@@ -165,10 +167,33 @@ def get_claim_history(customer_id: str, db: Database) -> list[PreviousClaim]:
 
 
 @app.get("/api/instructions", operation_id="get_instructions")
-def get_instructions(db: Database) -> Instructions:
-    """Get the agent's instructions, followed by the policy wording."""
-    wording = db.execute("SELECT policy_wording FROM settings").fetchone()[0]
-    return Instructions(text=f"{INSTRUCTIONS.read_text(encoding='utf-8')}\n{wording}")
+def get_instructions() -> Instructions:
+    """Get the agent's instructions for working a claim."""
+    return Instructions(text=(INSTRUCTIONS / "claim.md").read_text(encoding="utf-8"))
+
+
+@app.get("/api/documents/{document}/sections", operation_id="list_sections")
+def list_sections(document: str, db: Database) -> list[SectionTitle]:
+    """List the numbered sections of the policy wording or the claims manual."""
+    rows = db.execute(
+        "SELECT section, title FROM sections WHERE document = ? ORDER BY section",
+        (document,),
+    ).fetchall()
+    if not rows:
+        raise HTTPException(404, f"Document {document} not found")
+    return [SectionTitle(**dict(row)) for row in rows]
+
+
+@app.get("/api/documents/{document}/sections/{section}", operation_id="read_section")
+def read_section(document: str, section: int, db: Database) -> Section:
+    """Read one numbered section of the policy wording or the claims manual."""
+    row = db.execute(
+        "SELECT * FROM sections WHERE document = ? AND section = ?",
+        (document, section),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, f"Section {section} of {document} not found")
+    return Section(**dict(row))
 
 
 @app.get("/api/handlers", operation_id="list_handlers")
