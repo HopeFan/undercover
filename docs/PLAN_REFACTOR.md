@@ -116,12 +116,12 @@ Replace `agent/main.py` and `agent/queue.py` with `agent/harness.py`. Write the 
 
 Rewrite `backend/instructions/claim.md` and `queue.md` as a goal, what the agent has to work with, and its limits. Write them from the policy wording and the manual, never from `data/evals/`.
 
-- [ ] Neither file has a numbered workflow, and each opens with its goal
-- [ ] Every rule in today's instructions is still there or deliberately dropped, listed in the commit message: the wording first, refer only for the manual's reasons, one decision, sign-off over the limit, the summary as one plain paragraph, and a referral counted as done
-- [ ] Each file is shorter than today's
-- [ ] Live: on a fresh database, `uv run -m agent CLM-1020` prints one line, and its steps include Read steps for the manual's interpretation notes
-- [ ] The fresh review finds no must-fix issue
-- [ ] `npm run check` passes
+- [x] Neither file has a numbered workflow, and each opens with its goal
+- [x] Every rule in today's instructions is still there or deliberately dropped, listed in the commit message: the wording first, refer only for the manual's reasons, one decision, sign-off over the limit, the summary as one plain paragraph, and a referral counted as done
+- [x] Each file is shorter than today's
+- [x] Live: on a fresh database, `uv run -m agent CLM-1020` prints one line, and its steps include Read steps for the manual's interpretation notes
+- [x] The fresh review finds no must-fix issue
+- [x] `npm run check` passes
 
 ## Phase 6: The backend and dashboard, a live trial and the docs
 
