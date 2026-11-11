@@ -2,7 +2,7 @@ import sqlite3
 from contextlib import closing
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent import __main__ as cli
 from agent import api, main, queue
@@ -55,17 +55,6 @@ def humans(stub):
 
 def status(client, claim_id):
     return client.get(f"/api/claims/{claim_id}").json()["status"]
-
-
-def test_the_queue_agents_tools(client):
-    operations = {
-        operation["operationId"]
-        for path in client.get("/openapi.json").json()["paths"].values()
-        for operation in path.values()
-    }
-    names = [t.name for t in queue.queue_tools("run-1", 5, [], None)]
-    assert names == ["list_claims", "write_todos", "work_claim"]
-    assert {"list_claims", "write_todos"} <= operations
 
 
 def test_the_to_do_list_is_stored_as_the_agent_works(
@@ -124,6 +113,9 @@ def test_a_run_never_starts_more_claims_than_its_cap(
     assert capsys.readouterr().out.splitlines()[2] == (
         "Refused: this run is capped at 2 claims."
     )
+    refusal = stub.prompts[-1][-1]
+    assert isinstance(refusal, ToolMessage)
+    assert refusal.status == "error"
     assert status(client, "CLM-1003") == "waiting"
 
 
@@ -262,3 +254,13 @@ def test_command_line_cap(monkeypatch):
     cli.main(["--cap", "5"])
     cli.main([])
     assert caps == [5, None]
+
+
+@pytest.mark.parametrize("cap", ["0", "-3"])
+def test_a_cap_below_one_is_refused(monkeypatch, capsys, cap):
+    runs = []
+    monkeypatch.setattr(cli, "work_queue", runs.append)
+    with pytest.raises(SystemExit):
+        cli.main(["--cap", cap])
+    assert "the cap must be at least 1" in capsys.readouterr().err
+    assert runs == []

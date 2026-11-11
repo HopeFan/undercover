@@ -15,10 +15,9 @@ def broken(*before):
 
 def approval_replies(*extra):
     return [
-        call("get_claim", claim_id="CLM-1001"),
+        call("get_claim"),
         call(
             "record_decision",
-            claim_id="CLM-1001",
             decision="approve",
             payout=420.0,
             section="Section 3, Trip Delay",
@@ -34,11 +33,11 @@ def approval(*extra):
 
 
 def pay():
-    return call("pay_claim", claim_id="CLM-1001", amount=420.0)
+    return call("pay_claim", amount=420.0)
 
 
 def test_a_failed_claim_goes_back_in_the_queue_and_is_tried_again(client):
-    line = main.work_claim("CLM-1001", broken(call("get_claim", claim_id="CLM-1001")))
+    line = main.work_claim("CLM-1001", broken(call("get_claim")))
     assert line == "CLM-1001  failed: The model is unavailable. Back in the queue."
     assert client.get("/api/claims/CLM-1001").json()["status"] == "waiting"
 
@@ -75,7 +74,7 @@ def test_a_model_call_that_fails_once_is_retried(client):
 
 
 def test_a_claim_agent_going_in_circles_is_stopped(client):
-    stub = StubModel(messages=iter([call("get_claim", claim_id="CLM-1001")] * 40))
+    stub = StubModel(messages=iter([call("get_claim")] * 40))
     line = main.work_claim("CLM-1001", stub)
     assert line.startswith("CLM-1001  failed: ")
     assert "limit" in line
@@ -103,9 +102,7 @@ def test_a_failure_after_the_decision_never_decides_or_pays_twice(client):
 
 def test_finishing_without_a_decision_counts_as_a_failure(client):
     stub = StubModel(
-        messages=iter(
-            [call("get_claim", claim_id="CLM-1001"), AIMessage(content="I'm not sure.")]
-        )
+        messages=iter([call("get_claim"), AIMessage(content="I'm not sure.")])
     )
     line = main.work_claim("CLM-1001", stub)
     assert line == (
@@ -116,12 +113,9 @@ def test_finishing_without_a_decision_counts_as_a_failure(client):
 
 def test_an_approval_over_the_limit_waits_for_sign_off(client):
     stub = script(
-        "CLM-1002",
-        "POL-2002",
-        "CUS-3002",
         "approve",
         1350.0,
-        call("pay_claim", claim_id="CLM-1002", amount=1350.0),
+        call("pay_claim", amount=1350.0),
     )
     line = main.work_claim("CLM-1002", stub)
     assert line == "CLM-1002  approve  $1,350.00  waiting for sign-off"
@@ -141,14 +135,25 @@ def test_a_refusal_is_not_retried_and_a_lost_connection_is(monkeypatch, client):
 
     monkeypatch.setattr(api, "_call", flaky_call)
     stub = script(
-        "CLM-1002",
-        "POL-2002",
-        "CUS-3002",
         "approve",
         1350.0,
-        call("pay_claim", claim_id="CLM-1002", amount=1350.0),
+        call("pay_claim", amount=1350.0),
     )
     line = main.work_claim("CLM-1002", stub)
     assert line == "CLM-1002  approve  $1,350.00  waiting for sign-off"
     assert calls["/api/policies/POL-2002"] == 3
     assert calls["/api/claims/CLM-1002/payment"] == 1
+
+
+def test_an_error_that_is_not_a_refusal_stops_the_attempt(monkeypatch, client):
+    real_call = api._call
+
+    def down_for_policies(method, path, body=None):
+        if path.startswith("/api/policies/"):
+            raise api.ApiUnavailable("Connection refused")
+        return real_call(method, path, body)
+
+    monkeypatch.setattr(api, "_call", down_for_policies)
+    stub = StubModel(messages=iter([call("get_policy"), *approval_replies()]))
+    line = main.work_claim("CLM-1001", stub)
+    assert line == "CLM-1001  failed: Connection refused. Back in the queue."

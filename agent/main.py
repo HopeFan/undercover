@@ -22,7 +22,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import SecretStr
 
 from agent import api
-from agent.tools import TOOLS
+from agent.tools import CLAIM_TOOLS, ClaimContext, Refused
 
 load_dotenv(override=True)
 
@@ -46,9 +46,11 @@ def model() -> ChatOpenAI:
 
 
 def refusal(error: Exception, request: ToolCallRequest) -> str | None:
-    """Give the model the backend's reason for refusing; other errors stop the run."""
+    """Give the model the reason a request was refused; other errors stop the run."""
     if isinstance(error, api.ApiError):
         return f"Refused with status {error}"
+    if isinstance(error, Refused):
+        return f"Refused: {error}"
     return None
 
 
@@ -78,7 +80,8 @@ def steps(message: AnyMessage) -> list[tuple[str, str]]:
 
 def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     """Work one claim, recording each step with the backend, and return the reply."""
-    api.start_claim(claim_id, thread_id)
+    claim = api.start_claim(claim_id, thread_id)
+    context = ClaimContext(claim_id, claim["policy_id"], claim["customer_id"])
     instructions = api.get_instructions()["claim"]
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         ModelRetryMiddleware(max_retries=3, on_failure="error"),
@@ -90,14 +93,16 @@ def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     ]
     agent = create_agent(
         llm or model(),
-        tools=TOOLS,
+        tools=CLAIM_TOOLS,
         system_prompt=instructions,
         middleware=middleware,
+        context_schema=ClaimContext,
         checkpointer=InMemorySaver(),
     )
     states = agent.stream(
         {"messages": [{"role": "user", "content": f"Claim {claim_id}"}]},
         config={"configurable": {"thread_id": thread_id}},
+        context=context,
         stream_mode="values",
     )
     messages = next(states)["messages"]

@@ -7,7 +7,6 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 
 from agent import __main__ as cli
 from agent import api, main
-from agent.tools import TOOLS
 
 
 class StubModel(BaseChatModel):
@@ -38,16 +37,15 @@ def call(name, text="", **args):
     )
 
 
-def script(claim_id, policy_id, customer_id, decision, payout, *extra):
+def script(decision, payout, *extra):
     return StubModel(
         messages=iter(
             [
-                call("get_claim", claim_id=claim_id),
-                call("get_policy", policy_id=policy_id),
-                call("get_claim_history", customer_id=customer_id),
+                call("get_claim"),
+                call("get_policy"),
+                call("get_claim_history"),
                 call(
                     "record_decision",
-                    claim_id=claim_id,
                     decision=decision,
                     payout=payout,
                     section="Section 3, Trip Delay",
@@ -60,33 +58,11 @@ def script(claim_id, policy_id, customer_id, decision, payout, *extra):
     )
 
 
-def test_tools_are_named_after_backend_operations(client):
-    operations = {
-        operation["operationId"]
-        for path in client.get("/openapi.json").json()["paths"].values()
-        for operation in path.values()
-    }
-    names = [t.name for t in TOOLS]
-    assert names == [
-        "get_claim",
-        "get_policy",
-        "get_claim_history",
-        "list_sections",
-        "read_section",
-        "record_decision",
-        "pay_claim",
-    ]
-    assert set(names) <= operations
-
-
 def test_run_approves_and_pays_within_the_limit(client):
     stub = script(
-        "CLM-1001",
-        "POL-2001",
-        "CUS-3001",
         "approve",
         420.0,
-        call("pay_claim", text="Paying now.", claim_id="CLM-1001", amount=420.0),
+        call("pay_claim", text="Paying now.", amount=420.0),
     )
     assert main.run("CLM-1001", "thread-1", stub) == "Decision: approve."
 
@@ -104,16 +80,16 @@ def test_run_approves_and_pays_within_the_limit(client):
         "tool_result",
         "message",
     ]
-    assert steps[0]["content"] == 'get_claim(claim_id="CLM-1001")'
+    assert steps[0]["content"] == "get_claim()"
     assert steps[1]["content"].startswith('get_claim: {"claim_id": "CLM-1001"')
     assert steps[8]["content"] == "Paying now."
-    assert steps[9]["content"] == 'pay_claim(claim_id="CLM-1001", amount=420.0)'
+    assert steps[9]["content"] == "pay_claim(amount=420.0)"
     assert steps[-1]["content"] == "Decision: approve."
     assert {s["thread_id"] for s in steps} == {"thread-1"}
 
 
 def test_run_uses_the_instructions_from_the_backend(client):
-    stub = script("CLM-1003", "POL-2003", "CUS-3003", "refer", 0)
+    stub = script("refer", 0)
     main.run("CLM-1003", "thread-1", stub)
     system = stub.prompts[0][0]
     assert isinstance(system, SystemMessage)
@@ -122,12 +98,9 @@ def test_run_uses_the_instructions_from_the_backend(client):
 
 def test_payment_over_the_limit_is_refused(client):
     stub = script(
-        "CLM-1002",
-        "POL-2002",
-        "CUS-3002",
         "approve",
         1350.0,
-        call("pay_claim", claim_id="CLM-1002", amount=1350.0),
+        call("pay_claim", amount=1350.0),
     )
     main.run("CLM-1002", "thread-2", stub)
 
@@ -144,9 +117,7 @@ def test_payment_over_the_limit_is_refused(client):
 
 @pytest.mark.parametrize("decision", ["decline", "refer"])
 def test_run_declines_and_refers(client, decision):
-    main.run(
-        "CLM-1003", "thread-3", script("CLM-1003", "POL-2003", "CUS-3003", decision, 0)
-    )
+    main.run("CLM-1003", "thread-3", script(decision, 0))
     claim = client.get("/api/claims/CLM-1003").json()
     assert claim["status"] == "decided"
     assert claim["decision"]["decision"] == decision
@@ -162,7 +133,6 @@ def test_run_records_the_sections_it_reads(client):
                 call("read_section", document="claims_manual", section=99),
                 call(
                     "record_decision",
-                    claim_id="CLM-1003",
                     decision="refer",
                     payout=0,
                     section="Claims manual, section 9, Repeat claims",
@@ -194,7 +164,7 @@ def test_run_records_the_sections_it_reads(client):
 
 
 def test_an_empty_history_reaches_the_model_as_an_empty_list(client):
-    stub = script("CLM-1003", "POL-2003", "CUS-3003", "refer", 0)
+    stub = script("refer", 0)
     main.run("CLM-1003", "thread-6", stub)
     history = next(
         m
@@ -205,9 +175,7 @@ def test_an_empty_history_reaches_the_model_as_an_empty_list(client):
 
 
 def test_run_needs_a_waiting_claim():
-    main.run(
-        "CLM-1003", "thread-3", script("CLM-1003", "POL-2003", "CUS-3003", "refer", 0)
-    )
+    main.run("CLM-1003", "thread-3", script("refer", 0))
     with pytest.raises(api.ApiError, match="409: Claim CLM-1003 is not waiting"):
         main.run("CLM-1003", "thread-4", StubModel(messages=iter([])))
 

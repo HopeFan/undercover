@@ -44,7 +44,7 @@ __main__.py ──> harness.py ──> tools.py ──> api.py ──> the backe
 ```
 
 - `api.py`: the backend's address, defined once, and one function per backend operation, named after it, such as `api.record_decision(claim_id, ...)`. A refusal raises `ApiError` with the status and the backend's reason. Nothing else in `agent/` builds a URL or makes an HTTP request.
-- `tools.py`: every tool for both agents, and the two contexts. `ClaimContext` holds the claim id, policy id and customer id. `RunContext` holds the run id, the cap, the claims started so far and the function that works a claim. Each tool takes `runtime: ToolRuntime[...]` where it needs the context, and calls `api.py`.
+- `tools.py`: every tool for both agents, and the two contexts. `ClaimContext` holds the claim id, policy id and customer id, and never changes. `RunContext` holds the run id, the cap, the function that works a claim and the claims started so far. Each tool takes `runtime: ToolRuntime[...]` where it needs the context, and calls `api.py`. The claims started are the one thing a tool changes. They stay in the context rather than the graph's state, because each tool call runs on its own and parallel calls reading state could pass the cap.
 - `harness.py`: the model, the middleware, one function that streams an agent and hands each new message to a callback, the claim agent with `work_claim`, and the queue agent with `work_queue`, split into small functions. It imports `api` and `tools`, and nothing imports it but `__main__.py`.
 
 ### Errors
@@ -90,14 +90,14 @@ Add `agent/api.py` and move every backend call into it. Use `ToolErrorMiddleware
 
 Move the queue's tools into `agent/tools.py`, add `ClaimContext` and `RunContext`, and give every tool that needs them `runtime: ToolRuntime[...]`. Fix `--cap 0`.
 
-- [ ] `agent/tools.py` holds all ten tools, and `grep -rn "@tool" agent --include=*.py` finds no other module outside the tests
-- [ ] A pytest test checks the claim agent's tool schemas: no tool has a `claim_id`, `policy_id` or `customer_id` argument
-- [ ] Stub model test: the claim agent records its decision and payment on the claim in its context, and a stub that asks for another claim has no way to name it
-- [ ] Stub model test: the cap, the to-do list, a failed claim going back in the queue and being tried again, a claim that fails twice, and the missed-claims check all behave as in the harness build, with the run's state in `RunContext`
-- [ ] `uv run -m agent --cap 0` exits with a message that the cap must be at least 1, and starts no run. A negative cap does the same
-- [ ] `queue_tools()` and its closures are gone: `grep -rn "def queue_tools" agent` finds nothing, and the queue's tools read the run id, the cap and the claims started from `runtime.context`
-- [ ] The fresh review finds no must-fix issue
-- [ ] `npm run check` passes
+- [x] `agent/tools.py` holds all ten tools, and `grep -rn "@tool" agent --include=*.py` finds no other module outside the tests
+- [x] A pytest test checks the claim agent's tool schemas: no tool has a `claim_id`, `policy_id` or `customer_id` argument
+- [x] Stub model test: the claim agent records its decision and payment on the claim in its context, and a stub that asks for another claim has no way to name it
+- [x] Stub model test: the cap, the to-do list, a failed claim going back in the queue and being tried again, a claim that fails twice, and the missed-claims check all behave as in the harness build, with the run's state in `RunContext`
+- [x] `uv run -m agent --cap 0` exits with a message that the cap must be at least 1, and starts no run. A negative cap does the same
+- [x] `queue_tools()` and its closures are gone: `grep -rn "def queue_tools" agent` finds nothing, and the queue's tools read the run id, the cap and the claims started from `runtime.context`
+- [x] The fresh review finds no must-fix issue
+- [x] `npm run check` passes
 
 ## Phase 4: One harness module
 
