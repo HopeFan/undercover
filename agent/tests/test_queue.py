@@ -5,7 +5,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from agent import __main__ as cli
-from agent import main, queue
+from agent import api, main, queue
 from agent.tests.test_agent import StubModel, call
 from agent.tests.test_failures import UNAVAILABLE
 
@@ -26,22 +26,12 @@ def outcomes(monkeypatch):
     scripted: dict[str, list[str]] = {}
 
     def run(claim_id, thread_id, llm=None):
-        main.call_backend(
-            "POST", f"/api/claims/{claim_id}/start", {"thread_id": thread_id}
-        )
+        api.start_claim(claim_id, thread_id)
         outcome = scripted[claim_id].pop(0)
         if outcome == "fail":
             raise UNAVAILABLE
-        main.call_backend(
-            "POST",
-            f"/api/claims/{claim_id}/decision",
-            {
-                "decision": outcome,
-                "payout": 420.0 if outcome == "approve" else 0,
-                "section": "Section 3, Trip Delay",
-                "reason": "Covered.",
-            },
-        )
+        payout = 420.0 if outcome == "approve" else 0
+        api.record_decision(claim_id, outcome, payout, "Section 3, Trip Delay", "Ok.")
         return "Done."
 
     monkeypatch.setattr(main, "run", run)

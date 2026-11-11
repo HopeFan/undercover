@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolM
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from agent import __main__ as cli
-from agent import main
+from agent import api, main
 from agent.tools import TOOLS
 
 
@@ -105,7 +105,7 @@ def test_run_approves_and_pays_within_the_limit(client):
         "message",
     ]
     assert steps[0]["content"] == 'get_claim(claim_id="CLM-1001")'
-    assert steps[1]["content"].startswith('get_claim: {"claim_id":"CLM-1001"')
+    assert steps[1]["content"].startswith('get_claim: {"claim_id": "CLM-1001"')
     assert steps[8]["content"] == "Paying now."
     assert steps[9]["content"] == 'pay_claim(claim_id="CLM-1001", amount=420.0)'
     assert steps[-1]["content"] == "Decision: approve."
@@ -135,6 +135,7 @@ def test_payment_over_the_limit_is_refused(client):
     assert isinstance(refusal, ToolMessage)
     assert "needs a handler's sign-off" in refusal.text
     assert refusal.text.startswith("Refused with status 403")
+    assert refusal.status == "error"
 
     claim = client.get("/api/claims/CLM-1002").json()
     assert claim["status"] == "waiting_for_sign_off"
@@ -179,18 +180,35 @@ def test_run_records_the_sections_it_reads(client):
     heading, _, text = reads[0]["content"].partition("\n\n")
     assert heading == "Claims manual, section 9: Repeat claims"
     assert text.startswith("Before deciding any claim")
-    assert steps[1]["content"].startswith('list_sections: [{"section":1')
+    assert steps[1]["content"].startswith('list_sections: [{"section": 1')
+    refused = next(
+        m
+        for m in stub.prompts[-1]
+        if isinstance(m, ToolMessage) and m.status == "error"
+    )
+    assert refused.name == "read_section"
     refusal = steps[5]
     assert refusal["kind"] == "tool_result"
     assert refusal["content"].startswith("read_section: Refused with status 404")
     assert client.get("/api/claims/CLM-1003").json()["status"] == "decided"
 
 
+def test_an_empty_history_reaches_the_model_as_an_empty_list(client):
+    stub = script("CLM-1003", "POL-2003", "CUS-3003", "refer", 0)
+    main.run("CLM-1003", "thread-6", stub)
+    history = next(
+        m
+        for m in stub.prompts[-1]
+        if isinstance(m, ToolMessage) and m.name == "get_claim_history"
+    )
+    assert history.text == "[]"
+
+
 def test_run_needs_a_waiting_claim():
     main.run(
         "CLM-1003", "thread-3", script("CLM-1003", "POL-2003", "CUS-3003", "refer", 0)
     )
-    with pytest.raises(main.BackendError, match="409: Claim CLM-1003 is not waiting"):
+    with pytest.raises(api.ApiError, match="409: Claim CLM-1003 is not waiting"):
         main.run("CLM-1003", "thread-4", StubModel(messages=iter([])))
 
 

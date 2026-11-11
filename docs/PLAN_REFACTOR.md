@@ -75,16 +75,16 @@ Write the rules that would have caught the review's issues. No code changes.
 
 Add `agent/api.py` and move every backend call into it. Use `ToolErrorMiddleware` for refusals, and limit `ToolRetryMiddleware` to connection errors and timeouts.
 
-- [ ] `grep -rn "/api/" agent --include=*.py` finds paths only in `agent/api.py` and the tests
-- [ ] `grep -rn "localhost:8000" agent` finds the address once, in `agent/api.py`
-- [ ] `grep -rnE "def (request|reply|call_backend)|REFUSED" agent` finds nothing
-- [ ] pytest: each `api` function calls its backend operation, and a refusal raises `ApiError` with the status and reason
-- [ ] Stub model test: a payment over the limit still reaches the model as an error message that mentions sign-off, and the run carries on
-- [ ] Stub model test: an unknown section still reaches the model as an error message, with no Read step
-- [ ] Stub model test: a refusal is not retried, and a connection error is retried twice
-- [ ] Every behavior test from the harness build passes
-- [ ] The fresh review finds no must-fix issue
-- [ ] `npm run check` passes
+- [x] `grep -rn "/api/" agent --include=*.py` finds backend paths only in `agent/api.py` and the tests. The one other match is OpenRouter's address, which belongs to the model and is defined once where the model is set up
+- [x] `grep -rn "localhost:8000" agent` finds the address once, in `agent/api.py`
+- [x] `grep -rnE "def (request|reply|call_backend)|REFUSED" agent` finds nothing
+- [x] pytest: each `api` function calls its backend operation, and a refusal raises `ApiError` with the status and reason
+- [x] Stub model test: a payment over the limit still reaches the model as an error message that mentions sign-off, and the run carries on
+- [x] Stub model test: an unknown section still reaches the model as an error message, with no Read step
+- [x] Stub model test: a refusal is not retried, and a connection error is retried twice
+- [x] Every behavior test from the harness build passes
+- [x] The fresh review finds no must-fix issue
+- [x] `npm run check` passes
 
 ## Phase 3: All the tools in one place, with run state through the context
 

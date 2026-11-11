@@ -11,6 +11,8 @@ from langchain.agents.middleware import (
     AgentMiddleware,
     ModelCallLimitMiddleware,
     ModelRetryMiddleware,
+    ToolCallRequest,
+    ToolErrorMiddleware,
     ToolRetryMiddleware,
 )
 from langchain_core.language_models import BaseChatModel
@@ -19,7 +21,8 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import SecretStr
 
-from agent.tools import REFUSED, TOOLS, request
+from agent import api
+from agent.tools import TOOLS
 
 load_dotenv(override=True)
 
@@ -42,16 +45,11 @@ def model() -> ChatOpenAI:
     )
 
 
-class BackendError(Exception):
-    """The backend refused a request the agent's run depends on."""
-
-
-def call_backend(method: str, path: str, body: dict[str, Any] | None = None) -> Any:
-    """Call the backend and return its JSON, raising if it refuses."""
-    response = request(method, path, body)
-    if response.is_error:
-        raise BackendError(f"{response.status_code}: {response.json()['detail']}")
-    return response.json()
+def refusal(error: Exception, request: ToolCallRequest) -> str | None:
+    """Give the model the backend's reason for refusing; other errors stop the run."""
+    if isinstance(error, api.ApiError):
+        return f"Refused with status {error}"
+    return None
 
 
 def read_step(section: dict[str, Any]) -> str:
@@ -65,7 +63,7 @@ def read_step(section: dict[str, Any]) -> str:
 def steps(message: AnyMessage) -> list[tuple[str, str]]:
     """Turn one message from the agent's run into steps for the dashboard."""
     if isinstance(message, ToolMessage):
-        if message.name == "read_section" and not message.text.startswith(REFUSED):
+        if message.name == "read_section" and message.status != "error":
             return [("read", read_step(json.loads(message.text)))]
         return [("tool_result", f"{message.name}: {message.text}")]
     found = []
@@ -80,11 +78,14 @@ def steps(message: AnyMessage) -> list[tuple[str, str]]:
 
 def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     """Work one claim, recording each step with the backend, and return the reply."""
-    call_backend("POST", f"/api/claims/{claim_id}/start", {"thread_id": thread_id})
-    instructions = call_backend("GET", "/api/instructions")["claim"]
+    api.start_claim(claim_id, thread_id)
+    instructions = api.get_instructions()["claim"]
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         ModelRetryMiddleware(max_retries=3, on_failure="error"),
-        ToolRetryMiddleware(max_retries=2, on_failure="error"),
+        ToolErrorMiddleware(refusal),
+        ToolRetryMiddleware(
+            max_retries=2, retry_on=(api.ApiUnavailable,), on_failure="error"
+        ),
         ModelCallLimitMiddleware(run_limit=CLAIM_MODEL_CALLS, exit_behavior="error"),
     ]
     agent = create_agent(
@@ -103,11 +104,7 @@ def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     for state in states:
         for message in state["messages"][len(messages) :]:
             for kind, content in steps(message):
-                call_backend(
-                    "POST",
-                    f"/api/claims/{claim_id}/steps",
-                    {"kind": kind, "content": content},
-                )
+                api.record_step(claim_id, kind, content)
         messages = state["messages"]
     return messages[-1].text
 
@@ -129,11 +126,7 @@ def settle(claim: dict[str, Any]) -> None:
         and decision["decision"] == "approve"
         and claim["payment"] is None
     ):
-        call_backend(
-            "POST",
-            f"/api/claims/{claim['claim_id']}/payment",
-            {"amount": decision["payout"]},
-        )
+        api.pay_claim(claim["claim_id"], decision["payout"])
 
 
 def work_claim(claim_id: str, llm: BaseChatModel | None = None) -> str:
@@ -144,16 +137,15 @@ def work_claim(claim_id: str, llm: BaseChatModel | None = None) -> str:
         run(claim_id, thread_id, llm)
     except Exception as failure:  # one bad claim must never stop a run
         error = str(failure) or type(failure).__name__
-    path = f"/api/claims/{claim_id}"
-    claim = call_backend("GET", path)
+    claim = api.get_claim(claim_id)
     if claim["thread_id"] != thread_id:
         return f"{claim_id}  not started: {error}"
     if claim["status"] == "in_progress":
         error = error or "The agent finished without recording a decision"
-        status = call_backend("POST", f"{path}/failure", {"error": error})["status"]
+        status = api.fail_claim(claim_id, error)["status"]
         where = "Back in the queue." if status == "waiting" else "Left for a handler."
         return f"{claim_id}  failed: {error}. {where}"
     if error:
-        call_backend("POST", f"{path}/steps", {"kind": "error", "content": error})
+        api.record_step(claim_id, "error", error)
     settle(claim)
     return report(claim)

@@ -1,6 +1,8 @@
+from collections import Counter
+
 from langchain_core.messages import AIMessage
 
-from agent import main
+from agent import api, main
 from agent.tests.test_agent import StubModel, call, script
 
 UNAVAILABLE = RuntimeError("The model is unavailable")
@@ -124,3 +126,29 @@ def test_an_approval_over_the_limit_waits_for_sign_off(client):
     line = main.work_claim("CLM-1002", stub)
     assert line == "CLM-1002  approve  $1,350.00  waiting for sign-off"
     assert client.get("/api/claims/CLM-1002").json()["payment"] is None
+
+
+def test_a_refusal_is_not_retried_and_a_lost_connection_is(monkeypatch, client):
+    calls = Counter()
+    lost = iter([api.ApiUnavailable("Connection refused")] * 2)
+    real_call = api._call
+
+    def flaky_call(method, path, body=None):
+        calls[path] += 1
+        if path == "/api/policies/POL-2002" and (error := next(lost, None)):
+            raise error
+        return real_call(method, path, body)
+
+    monkeypatch.setattr(api, "_call", flaky_call)
+    stub = script(
+        "CLM-1002",
+        "POL-2002",
+        "CUS-3002",
+        "approve",
+        1350.0,
+        call("pay_claim", claim_id="CLM-1002", amount=1350.0),
+    )
+    line = main.work_claim("CLM-1002", stub)
+    assert line == "CLM-1002  approve  $1,350.00  waiting for sign-off"
+    assert calls["/api/policies/POL-2002"] == 3
+    assert calls["/api/claims/CLM-1002/payment"] == 1
