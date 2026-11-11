@@ -3,8 +3,7 @@
 import argparse
 import sys
 
-from agent.main import work_claim
-from agent.queue import work_queue
+from agent.harness import work_claim, work_queue
 
 
 def cap(value: str) -> int:

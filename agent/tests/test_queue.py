@@ -1,13 +1,13 @@
 import sqlite3
+from collections import Counter
 from contextlib import closing
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent import __main__ as cli
-from agent import api, main, queue
-from agent.tests.test_agent import StubModel, call
-from agent.tests.test_failures import UNAVAILABLE
+from agent import api, harness
+from agent.tests.stubs import UNAVAILABLE, StubModel, call
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def outcomes(monkeypatch):
         api.record_decision(claim_id, outcome, payout, "Section 3, Trip Delay", "Ok.")
         return "Done."
 
-    monkeypatch.setattr(main, "run", run)
+    monkeypatch.setattr(harness, "run_claim_agent", run)
     return scripted
 
 
@@ -62,13 +62,13 @@ def test_the_to_do_list_is_stored_as_the_agent_works(
 ):
     outcomes.update({"CLM-1001": ["approve"], "CLM-1002": ["refer"]})
     seen = []
-    real_work_claim = main.work_claim
+    real_work_claim = harness.work_claim
 
     def work_claim(claim_id, llm=None):
         seen.append(client.get("/api/runs/current").json()["todos"])
         return real_work_claim(claim_id, llm)
 
-    monkeypatch.setattr(main, "work_claim", work_claim)
+    monkeypatch.setattr(harness, "work_claim", work_claim)
     stub = queue_model(
         call("list_claims"),
         call("write_todos", todos=plan("to_do", "to_do")),
@@ -79,7 +79,7 @@ def test_the_to_do_list_is_stored_as_the_agent_works(
         call("write_todos", todos=plan("done", "done")),
         AIMessage(content="Worked 2 claims: 1 approve and 1 refer."),
     )
-    queue.work_queue(2, stub)
+    harness.work_queue(2, stub)
 
     assert seen == [plan("in_progress", "to_do"), plan("done", "in_progress")]
     run = client.get("/api/runs/current").json()
@@ -109,7 +109,7 @@ def test_a_run_never_starts_more_claims_than_its_cap(
         call("work_claim", claim_id="CLM-1003"),
         AIMessage(content="Worked 2 claims."),
     )
-    queue.work_queue(2, stub)
+    harness.work_queue(2, stub)
     assert capsys.readouterr().out.splitlines()[2] == (
         "Refused: this run is capped at 2 claims."
     )
@@ -136,7 +136,7 @@ def test_a_failed_claim_goes_back_in_the_queue_and_the_run_carries_on(
         call("work_claim", claim_id="CLM-1002"),
         AIMessage(content="Worked 3 claims."),
     )
-    queue.work_queue(None, stub)
+    harness.work_queue(None, stub)
     assert capsys.readouterr().out.splitlines() == [
         "CLM-1001  approve  $420.00",
         "CLM-1002  failed: The model is unavailable. Back in the queue.",
@@ -160,7 +160,7 @@ def test_a_claim_that_fails_twice_is_left_for_a_handler(
         call("write_todos", todos=plan("left_for_handler")),
         AIMessage(content="CLM-1001 was left for a handler."),
     )
-    queue.work_queue(1, stub)
+    harness.work_queue(1, stub)
     assert capsys.readouterr().out.splitlines()[1] == (
         "CLM-1001  failed: The model is unavailable. Left for a handler."
     )
@@ -180,7 +180,7 @@ def test_the_agent_is_reminded_of_waiting_claims_within_its_cap(
         call("work_claim", claim_id="CLM-1002"),
         AIMessage(content="Worked 2 claims."),
     )
-    queue.work_queue(2, stub)
+    harness.work_queue(2, stub)
     reminder = humans(stub)[1]
     assert "CLM-1002" in reminder
     assert "CLM-1003" not in reminder
@@ -197,7 +197,7 @@ def test_a_claim_back_in_the_queue_is_a_missed_claim(client, three_waiting, outc
         call("work_claim", claim_id="CLM-1001"),
         AIMessage(content="Worked 1 claim."),
     )
-    queue.work_queue(1, stub)
+    harness.work_queue(1, stub)
     assert "CLM-1001" in humans(stub)[1]
     assert status(client, "CLM-1001") == "decided"
 
@@ -208,7 +208,7 @@ def test_after_two_reminders_the_run_finishes_anyway(client, three_waiting):
         AIMessage(content="Still nothing."),
         AIMessage(content="I'm done."),
     )
-    queue.work_queue(2, stub)
+    harness.work_queue(2, stub)
     assert len(humans(stub)) == 3
     assert client.get("/api/runs/current").json()["summary"] == "I'm done."
     assert status(client, "CLM-1001") == "waiting"
@@ -217,7 +217,7 @@ def test_after_two_reminders_the_run_finishes_anyway(client, three_waiting):
 def test_a_failure_of_the_queue_agent_finishes_the_run_and_says_why(
     capsys, client, three_waiting
 ):
-    queue.work_queue(2, queue_model(*[UNAVAILABLE] * 4))
+    harness.work_queue(2, queue_model(*[UNAVAILABLE] * 4))
     summary = "The run stopped: The model is unavailable"
     assert client.get("/api/runs/current").json()["summary"] == summary
     assert capsys.readouterr().out.splitlines()[-1] == summary
@@ -233,7 +233,7 @@ def test_work_claim_refuses_claims_that_are_not_waiting_or_unknown(
         call("work_claim", claim_id="CLM-1001"),
         AIMessage(content="Worked 1 claim."),
     )
-    queue.work_queue(1, stub)
+    harness.work_queue(1, stub)
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "Refused: CLM-1004 is not waiting, it is decided."
     assert lines[1].startswith("Refused with status 404")
@@ -243,7 +243,7 @@ def test_work_claim_refuses_claims_that_are_not_waiting_or_unknown(
 def test_nothing_waiting(capsys, client, database):
     with closing(sqlite3.connect(database)) as db, db:
         db.execute("UPDATE claims SET status = 'decided'")
-    queue.work_queue(5, queue_model())
+    harness.work_queue(5, queue_model())
     assert capsys.readouterr().out == "No claims are waiting.\n"
     assert client.get("/api/runs/current").json() is None
 
@@ -264,3 +264,42 @@ def test_a_cap_below_one_is_refused(monkeypatch, capsys, cap):
         cli.main(["--cap", cap])
     assert "the cap must be at least 1" in capsys.readouterr().err
     assert runs == []
+
+
+def lose_connection_once(monkeypatch, method, path, at_call):
+    """Make the backend unreachable for one request, the given call to this path."""
+    calls = Counter()
+    real_call = api._call
+
+    def flaky_call(call_method, call_path, body=None):
+        calls[(call_method, call_path)] += 1
+        if (call_method, call_path) == (method, path) and calls[
+            (method, path)
+        ] == at_call:
+            raise api.ApiUnavailable("Connection refused")
+        return real_call(call_method, call_path, body)
+
+    monkeypatch.setattr(api, "_call", flaky_call)
+
+
+def test_the_queue_agent_retries_a_lost_connection_to_the_queue(
+    monkeypatch, client, three_waiting
+):
+    lose_connection_once(monkeypatch, "GET", "/api/claims", at_call=2)
+    replies = [AIMessage(content="Nothing to do.") for _ in range(3)]
+    stub = queue_model(call("list_claims"), *replies)
+    harness.work_queue(1, stub)
+    listed = next(m for m in stub.prompts[1] if isinstance(m, ToolMessage))
+    assert listed.status == "success"
+    assert listed.text.startswith('[{"claim_id": "CLM-1001"')
+    assert client.get("/api/runs/current").json()["summary"] == "Nothing to do."
+
+
+def test_a_lost_connection_while_handing_over_a_claim_stops_the_run(
+    monkeypatch, client, three_waiting
+):
+    lose_connection_once(monkeypatch, "GET", "/api/claims/CLM-1001", at_call=1)
+    harness.work_queue(1, queue_model(call("work_claim", claim_id="CLM-1001")))
+    summary = client.get("/api/runs/current").json()["summary"]
+    assert summary == "The run stopped: Connection refused"
+    assert status(client, "CLM-1001") == "waiting"

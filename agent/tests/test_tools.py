@@ -1,8 +1,8 @@
 from langchain_core.messages import AIMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from agent import main
-from agent.tests.test_agent import StubModel, call
+from agent import harness
+from agent.tests.stubs import StubModel, call
 from agent.tools import CLAIM_TOOLS, QUEUE_TOOLS
 
 
@@ -51,6 +51,6 @@ def test_the_claim_agent_works_only_the_claim_in_its_context(client):
             ]
         )
     )
-    assert main.work_claim("CLM-1001", stub) == "CLM-1001  approve  $420.00"
+    assert harness.work_claim("CLM-1001", stub) == "CLM-1001  approve  $420.00"
     assert client.get("/api/claims/CLM-1001").json()["payment"]["amount"] == 420.0
     assert client.get("/api/claims/CLM-1002").json()["status"] == "waiting"

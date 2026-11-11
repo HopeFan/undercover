@@ -1,61 +1,9 @@
-from collections.abc import Iterator
-
 import pytest
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 
 from agent import __main__ as cli
-from agent import api, main
-
-
-class StubModel(BaseChatModel):
-    """A chat model that gives scripted replies, or raises a scripted error,
-    and keeps the prompts it was sent."""
-
-    messages: Iterator[AIMessage | Exception]
-    prompts: list[list[BaseMessage]] = []
-
-    @property
-    def _llm_type(self):
-        return "stub"
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.prompts.append(messages)
-        reply = next(self.messages)
-        if isinstance(reply, Exception):
-            raise reply
-        return ChatResult(generations=[ChatGeneration(message=reply)])
-
-
-def call(name, text="", **args):
-    return AIMessage(
-        content=text, tool_calls=[{"name": name, "args": args, "id": f"call-{name}"}]
-    )
-
-
-def script(decision, payout, *extra):
-    return StubModel(
-        messages=iter(
-            [
-                call("get_claim"),
-                call("get_policy"),
-                call("get_claim_history"),
-                call(
-                    "record_decision",
-                    decision=decision,
-                    payout=payout,
-                    section="Section 3, Trip Delay",
-                    reason="The delay was covered.",
-                ),
-                *extra,
-                AIMessage(content=f"Decision: {decision}."),
-            ]
-        )
-    )
+from agent import api, harness
+from agent.tests.stubs import StubModel, call, script
 
 
 def test_run_approves_and_pays_within_the_limit(client):
@@ -64,7 +12,7 @@ def test_run_approves_and_pays_within_the_limit(client):
         420.0,
         call("pay_claim", text="Paying now.", amount=420.0),
     )
-    assert main.run("CLM-1001", "thread-1", stub) == "Decision: approve."
+    assert harness.run_claim_agent("CLM-1001", "thread-1", stub) == "Decision: approve."
 
     claim = client.get("/api/claims/CLM-1001").json()
     assert claim["status"] == "decided"
@@ -90,7 +38,7 @@ def test_run_approves_and_pays_within_the_limit(client):
 
 def test_run_uses_the_instructions_from_the_backend(client):
     stub = script("refer", 0)
-    main.run("CLM-1003", "thread-1", stub)
+    harness.run_claim_agent("CLM-1003", "thread-1", stub)
     system = stub.prompts[0][0]
     assert isinstance(system, SystemMessage)
     assert system.content == client.get("/api/instructions").json()["claim"]
@@ -102,7 +50,7 @@ def test_payment_over_the_limit_is_refused(client):
         1350.0,
         call("pay_claim", amount=1350.0),
     )
-    main.run("CLM-1002", "thread-2", stub)
+    harness.run_claim_agent("CLM-1002", "thread-2", stub)
 
     refusal = stub.prompts[-1][-1]
     assert isinstance(refusal, ToolMessage)
@@ -117,7 +65,7 @@ def test_payment_over_the_limit_is_refused(client):
 
 @pytest.mark.parametrize("decision", ["decline", "refer"])
 def test_run_declines_and_refers(client, decision):
-    main.run("CLM-1003", "thread-3", script(decision, 0))
+    harness.run_claim_agent("CLM-1003", "thread-3", script(decision, 0))
     claim = client.get("/api/claims/CLM-1003").json()
     assert claim["status"] == "decided"
     assert claim["decision"]["decision"] == decision
@@ -142,7 +90,7 @@ def test_run_records_the_sections_it_reads(client):
             ]
         )
     )
-    main.run("CLM-1003", "thread-5", stub)
+    harness.run_claim_agent("CLM-1003", "thread-5", stub)
 
     steps = client.get("/api/claims/CLM-1003/steps").json()
     reads = [s for s in steps if s["kind"] == "read"]
@@ -165,7 +113,7 @@ def test_run_records_the_sections_it_reads(client):
 
 def test_an_empty_history_reaches_the_model_as_an_empty_list(client):
     stub = script("refer", 0)
-    main.run("CLM-1003", "thread-6", stub)
+    harness.run_claim_agent("CLM-1003", "thread-6", stub)
     history = next(
         m
         for m in stub.prompts[-1]
@@ -175,9 +123,9 @@ def test_an_empty_history_reaches_the_model_as_an_empty_list(client):
 
 
 def test_run_needs_a_waiting_claim():
-    main.run("CLM-1003", "thread-3", script("refer", 0))
+    harness.run_claim_agent("CLM-1003", "thread-3", script("refer", 0))
     with pytest.raises(api.ApiError, match="409: Claim CLM-1003 is not waiting"):
-        main.run("CLM-1003", "thread-4", StubModel(messages=iter([])))
+        harness.run_claim_agent("CLM-1003", "thread-4", StubModel(messages=iter([])))
 
 
 def test_command_line(monkeypatch, capsys):
@@ -189,10 +137,10 @@ def test_command_line(monkeypatch, capsys):
 def test_model_name(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.delenv("MODEL_NAME", raising=False)
-    default = main.model()
+    default = harness.model()
     assert default.model_name == "deepseek/deepseek-v4.1-flash"
     assert default.reasoning_effort == "low"
-    assert default.request_timeout == main.MODEL_TIMEOUT
+    assert default.request_timeout == harness.MODEL_TIMEOUT
     monkeypatch.setenv("MODEL_NAME", "openrouter/free")
-    assert main.model().model_name == "openrouter/free"
-    assert main.model().reasoning_effort is None
+    assert harness.model().model_name == "openrouter/free"
+    assert harness.model().reasoning_effort is None
