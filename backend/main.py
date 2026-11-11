@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -30,6 +30,7 @@ from backend.models import (
     SignOffRequest,
     StartRequest,
     StartRunRequest,
+    Status,
     Step,
     StepRequest,
     TodosRequest,
@@ -74,26 +75,48 @@ def approval_limit(db: sqlite3.Connection) -> float:
     return db.execute("SELECT payout_approval_limit FROM settings").fetchone()[0]
 
 
+def fetch_one(
+    db: sqlite3.Connection, sql: str, params: tuple[object, ...], missing: str
+) -> sqlite3.Row:
+    """Return the one row a query finds, or raise a 404 saying what wasn't found."""
+    row = db.execute(sql, params).fetchone()
+    if row is None:
+        raise HTTPException(404, f"{missing} not found")
+    return row
+
+
 def find_claim(db: sqlite3.Connection, claim_id: str) -> sqlite3.Row:
     """Return one claim's row, or raise a 404."""
-    row = db.execute(
-        "SELECT * FROM claim_view WHERE claim_id = ?", (claim_id,)
-    ).fetchone()
-    if row is None:
-        raise HTTPException(404, f"Claim {claim_id} not found")
-    return row
+    return fetch_one(
+        db,
+        "SELECT * FROM claim_view WHERE claim_id = ?",
+        (claim_id,),
+        f"Claim {claim_id}",
+    )
+
+
+def claim_in(
+    db: sqlite3.Connection, claim_id: str, status: Status, state: str
+) -> sqlite3.Row:
+    """Return a claim's row if it is in the given status, or raise a 409."""
+    claim = find_claim(db, claim_id)
+    if claim["status"] != status:
+        raise HTTPException(409, f"Claim {claim_id} is not {state}")
+    return claim
+
+
+def claim_fields(row: sqlite3.Row) -> dict[str, Any]:
+    """Return a claim's own record with its status and customer's name."""
+    return json.loads(row["record"]) | {
+        "status": row["status"],
+        "customer_name": row["customer_name"],
+    }
 
 
 def to_summary(row: sqlite3.Row) -> ClaimSummary:
     """Build a claim's line in the queue from its row."""
     return ClaimSummary(
-        **json.loads(row["record"])
-        | {
-            "status": row["status"],
-            "customer_name": row["customer_name"],
-            "decision": row["decision"],
-            "payout": row["payout"],
-        }
+        **claim_fields(row) | {"decision": row["decision"], "payout": row["payout"]}
     )
 
 
@@ -101,33 +124,25 @@ def to_claim(row: sqlite3.Row) -> Claim:
     """Build a claim in full, with its decision and payment, from its row."""
     decision = None
     if row["decision"] is not None:
-        decision = Decision(**{field: row[field] for field in Decision.model_fields})
+        decision = Decision(**dict(row))
     payment = None
     if row["paid_at"] is not None:
-        payment = Payment(**{field: row[field] for field in Payment.model_fields})
+        payment = Payment(**dict(row))
     return Claim(
-        **json.loads(row["record"])
-        | {
-            "status": row["status"],
-            "customer_name": row["customer_name"],
-            "thread_id": row["thread_id"],
-            "decision": decision,
-            "payment": payment,
-        }
+        **claim_fields(row)
+        | {"thread_id": row["thread_id"], "decision": decision, "payment": payment}
     )
-
-
-def find_run(db: sqlite3.Connection, run_id: str) -> Run:
-    """Return one run, or raise a 404."""
-    row = db.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
-    if row is None:
-        raise HTTPException(404, f"Run {run_id} not found")
-    return to_run(row)
 
 
 def to_run(row: sqlite3.Row) -> Run:
     """Build a run, with its to-do list, from its row."""
     return Run(**dict(row) | {"todos": json.loads(row["todos"])})
+
+
+def find_run(db: sqlite3.Connection, run_id: str) -> Run:
+    """Return one run, or raise a 404."""
+    sql = "SELECT * FROM runs WHERE run_id = ?"
+    return to_run(fetch_one(db, sql, (run_id,), f"Run {run_id}"))
 
 
 def add_step(
@@ -187,22 +202,16 @@ def get_claim(claim_id: str, db: Database) -> Claim:
 @app.get("/api/policies/{policy_id}", operation_id="get_policy")
 def get_policy(policy_id: str, db: Database) -> Policy:
     """Get a policy: the plan, add-ons, purchase date, trip and travelers."""
-    row = db.execute(
-        "SELECT record FROM policies WHERE policy_id = ?", (policy_id,)
-    ).fetchone()
-    if row is None:
-        raise HTTPException(404, f"Policy {policy_id} not found")
+    sql = "SELECT record FROM policies WHERE policy_id = ?"
+    row = fetch_one(db, sql, (policy_id,), f"Policy {policy_id}")
     return Policy(**json.loads(row["record"]))
 
 
 @app.get("/api/customers/{customer_id}/claims", operation_id="get_claim_history")
 def get_claim_history(customer_id: str, db: Database) -> list[PreviousClaim]:
     """Get a customer's earlier claims, with the outcome and the amount paid."""
-    row = db.execute(
-        "SELECT record FROM customers WHERE customer_id = ?", (customer_id,)
-    ).fetchone()
-    if row is None:
-        raise HTTPException(404, f"Customer {customer_id} not found")
+    sql = "SELECT record FROM customers WHERE customer_id = ?"
+    row = fetch_one(db, sql, (customer_id,), f"Customer {customer_id}")
     return [
         PreviousClaim(**claim) for claim in json.loads(row["record"])["previous_claims"]
     ]
@@ -232,12 +241,8 @@ def list_sections(document: str, db: Database) -> list[SectionTitle]:
 @app.get("/api/documents/{document}/sections/{section}", operation_id="read_section")
 def read_section(document: str, section: int, db: Database) -> Section:
     """Read one numbered section of the policy wording or the claims manual."""
-    row = db.execute(
-        "SELECT * FROM sections WHERE document = ? AND section = ?",
-        (document, section),
-    ).fetchone()
-    if row is None:
-        raise HTTPException(404, f"Section {section} of {document} not found")
+    sql = "SELECT * FROM sections WHERE document = ? AND section = ?"
+    row = fetch_one(db, sql, (document, section), f"Section {section} of {document}")
     return Section(**dict(row))
 
 
@@ -251,13 +256,12 @@ def list_handlers(db: Database) -> list[Handler]:
 @app.post("/api/claims/{claim_id}/start", operation_id="start_claim")
 def start_claim(claim_id: str, request: StartRequest, db: Database) -> Claim:
     """Start work on a waiting claim, which moves it to in progress."""
-    if find_claim(db, claim_id)["status"] != "waiting":
-        raise HTTPException(409, f"Claim {claim_id} is not waiting")
+    claim_in(db, claim_id, "waiting", "waiting")
     db.execute(
         "UPDATE claims SET status = 'in_progress', thread_id = ? WHERE claim_id = ?",
         (request.thread_id, claim_id),
     )
-    return to_claim(find_claim(db, claim_id))
+    return get_claim(claim_id, db)
 
 
 @app.post("/api/claims/{claim_id}/steps", operation_id="record_step")
@@ -282,8 +286,7 @@ def list_steps(claim_id: str, db: Database) -> list[Step]:
 @app.post("/api/claims/{claim_id}/decision", operation_id="record_decision")
 def record_decision(claim_id: str, request: DecisionRequest, db: Database) -> Claim:
     """Record the decision on a claim; an approval over the limit waits for sign-off."""
-    if find_claim(db, claim_id)["status"] != "in_progress":
-        raise HTTPException(409, f"Claim {claim_id} is not in progress")
+    claim_in(db, claim_id, "in_progress", "in progress")
     payout = round(request.payout, 2)
     held = request.decision == "approve" and payout > approval_limit(db)
     db.execute(
@@ -294,7 +297,7 @@ def record_decision(claim_id: str, request: DecisionRequest, db: Database) -> Cl
         "UPDATE claims SET status = ? WHERE claim_id = ?",
         ("waiting_for_sign_off" if held else "decided", claim_id),
     )
-    return to_claim(find_claim(db, claim_id))
+    return get_claim(claim_id, db)
 
 
 @app.post("/api/claims/{claim_id}/payment", operation_id="pay_claim")
@@ -320,14 +323,9 @@ def pay_claim(claim_id: str, request: PaymentRequest, db: Database) -> Payment:
 @app.post("/api/claims/{claim_id}/sign-off", operation_id="sign_off_claim")
 def sign_off_claim(claim_id: str, request: SignOffRequest, db: Database) -> Claim:
     """Sign off a held payout as a handler, which pays it and decides the claim."""
-    claim = find_claim(db, claim_id)
-    if claim["status"] != "waiting_for_sign_off":
-        raise HTTPException(409, f"Claim {claim_id} is not waiting for sign-off")
-    row = db.execute(
-        "SELECT * FROM handlers WHERE handler_id = ?", (request.handler_id,)
-    ).fetchone()
-    if row is None:
-        raise HTTPException(404, f"Handler {request.handler_id} not found")
+    claim = claim_in(db, claim_id, "waiting_for_sign_off", "waiting for sign-off")
+    sql = "SELECT * FROM handlers WHERE handler_id = ?"
+    row = fetch_one(db, sql, (request.handler_id,), f"Handler {request.handler_id}")
     handler = Handler(**dict(row))
     if not handler.can_approve_over_limit:
         raise HTTPException(
@@ -336,17 +334,15 @@ def sign_off_claim(claim_id: str, request: SignOffRequest, db: Database) -> Clai
         )
     pay(db, claim_id, claim["payout"], handler.name)
     db.execute("UPDATE claims SET status = 'decided' WHERE claim_id = ?", (claim_id,))
-    return to_claim(find_claim(db, claim_id))
+    return get_claim(claim_id, db)
 
 
 @app.post("/api/claims/{claim_id}/failure", operation_id="fail_claim")
 def fail_claim(claim_id: str, request: FailureRequest, db: Database) -> Claim:
     """Record a failed attempt: the claim goes back in the queue, or to a handler."""
-    claim = find_claim(db, claim_id)
-    if claim["status"] != "in_progress":
-        raise HTTPException(409, f"Claim {claim_id} is not in progress")
+    claim = claim_in(db, claim_id, "in_progress", "in progress")
     fail(db, claim, request.error)
-    return to_claim(find_claim(db, claim_id))
+    return get_claim(claim_id, db)
 
 
 @app.post("/api/runs", operation_id="start_run")

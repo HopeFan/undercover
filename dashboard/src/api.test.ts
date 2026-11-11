@@ -22,3 +22,11 @@ it("falls back to a general message when the reason isn't text", async () => {
   stubApi({ "GET /api/instructions": new Refusal(422, [{ msg: "bad" }]) });
   await expect(api.getInstructions()).rejects.toThrow("The request failed");
 });
+
+it("explains a failed request with no body", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response("", { status: 500 }))),
+  );
+  await expect(api.listClaims()).rejects.toThrow("The request failed");
+});

@@ -49,7 +49,14 @@ def test_a_lost_connection_or_a_server_error_can_be_tried_again(monkeypatch, ans
     monkeypatch.setattr(
         api,
         "_client",
-        lambda: httpx.Client(base_url=api.BACKEND_URL, transport=transport),
+        lambda: httpx.Client(base_url=api.backend_url(), transport=transport),
     )
     with pytest.raises(api.ApiUnavailable):
         api.list_claims()
+
+
+def test_the_backend_address_follows_the_dashboards_setting(monkeypatch):
+    monkeypatch.setenv("UNDERCOVER_API", "http://127.0.0.1:8002")
+    assert api.backend_url() == "http://127.0.0.1:8002"
+    monkeypatch.delenv("UNDERCOVER_API")
+    assert api.backend_url() == "http://127.0.0.1:8000"

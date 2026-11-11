@@ -127,13 +127,13 @@ Rewrite `backend/instructions/claim.md` and `queue.md` as a goal, what the agent
 
 Apply the same review to `backend/` and `dashboard/`, fix what it confirms, run the trial and update the docs.
 
-- [ ] Each candidate is confirmed or ruled out, and the fixes are made. Three are known: the backend repeats a "find a row or return 404" lookup 7 times, status names appear as text in SQL in 6 places, and the harness's `settle` pays an approval the agent left unpaid, a business action that may belong in the backend. The dashboard already has one client in `api.ts`. The findings are listed in `STATUS.md`
-- [ ] Live: after reseeding, `uv run -m agent --cap 5` works five claims on its own. The queue page shows the to-do list filling in and being ticked off, and each claim page shows its Read steps. The other claims stay waiting, and none is in progress
-- [ ] Live: every approval within the limit is paid once, and every approval over $1,000 waits for sign-off with no payment
-- [ ] Live: the five decisions are compared with the last trial's (approve CLM-1001 $420.00, CLM-1008 $2,240.00 and CLM-1011 $1,150.00, refer CLM-1018, decline CLM-1010), and any difference is reported
-- [ ] Codex reviews the finished code with `review-prompt.md`, unchanged and read only, and its findings are scored against the rubric in that folder and reported
-- [ ] `SPEC.md`, `TECH_STACK.md` and `STATUS.md` describe the product as it now is
-- [ ] `npm run check` passes
+- [x] Each candidate is confirmed or ruled out, and the fixes are made. Three are known: the backend repeats a "find a row or return 404" lookup 7 times, status names appear as text in SQL in 6 places, and the harness's `settle` pays an approval the agent left unpaid, a business action that may belong in the backend. The dashboard already has one client in `api.ts`. The findings are listed in `STATUS.md`
+- [x] Live: after reseeding, `uv run -m agent --cap 5` works five claims on its own. The queue page shows the to-do list filling in and being ticked off, and each claim page shows its Read steps. The other claims stay waiting, and none is in progress
+- [x] Live: every approval within the limit is paid once, and every approval over $1,000 waits for sign-off with no payment
+- [x] Live: the five decisions are compared with the last trial's (approve CLM-1001 $420.00, CLM-1008 $2,240.00 and CLM-1011 $1,150.00, refer CLM-1018, decline CLM-1010), and any difference is reported
+- [x] Codex reviews the finished code with `review-prompt.md`, unchanged and read only, and its findings are scored against the rubric in that folder and reported
+- [x] `SPEC.md`, `TECH_STACK.md` and `STATUS.md` describe the product as it now is
+- [x] `npm run check` passes
 
 ## Not in this plan
 

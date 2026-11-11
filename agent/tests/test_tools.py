@@ -1,9 +1,11 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from langchain_core.messages import AIMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from agent import harness
 from agent.tests.stubs import StubModel, call
-from agent.tools import CLAIM_TOOLS, QUEUE_TOOLS
+from agent.tools import CLAIM_TOOLS, QUEUE_TOOLS, RunContext
 
 
 def test_the_tools_are_named_after_backend_operations(client):
@@ -54,3 +56,13 @@ def test_the_claim_agent_works_only_the_claim_in_its_context(client):
     assert harness.work_claim("CLM-1001", stub) == "CLM-1001  approve  $420.00"
     assert client.get("/api/claims/CLM-1001").json()["payment"]["amount"] == 420.0
     assert client.get("/api/claims/CLM-1002").json()["status"] == "waiting"
+
+
+def test_parallel_hand_overs_never_pass_the_cap():
+    run = RunContext("run-1", 2, lambda claim_id: claim_id)
+    claims = [f"CLM-{n}" for n in range(1000, 1050)]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        reserved = list(pool.map(run.reserve, claims))
+    assert reserved.count(True) == 2
+    assert len(run.started) == 2
+    assert run.reserve(run.started[0])

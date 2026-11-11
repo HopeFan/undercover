@@ -1,11 +1,12 @@
 """The UnderCover backend's API: its address and one function per operation."""
 
+import os
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 import httpx
 
-BACKEND_URL = "http://localhost:8000"
+DEFAULT_BACKEND_URL = "http://127.0.0.1:8000"
 
 
 class ApiError(Exception):
@@ -21,9 +22,14 @@ class ApiUnavailable(Exception):
     """The backend could not be reached or failed, so the request can be tried again."""
 
 
+def backend_url() -> str:
+    """Return the backend's address: UNDERCOVER_API, which the dashboard reads too."""
+    return os.getenv("UNDERCOVER_API", DEFAULT_BACKEND_URL)
+
+
 def _client() -> httpx.Client:
     """Return a client for the backend."""
-    return httpx.Client(base_url=BACKEND_URL, timeout=30)
+    return httpx.Client(base_url=backend_url(), timeout=30)
 
 
 def _call(method: str, path: str, body: dict[str, Any] | None = None) -> Any:

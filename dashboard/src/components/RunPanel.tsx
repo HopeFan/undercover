@@ -1,6 +1,7 @@
 import { api, type Run } from "../api";
-import { time, todoLabels } from "../format";
+import { time } from "../format";
 import { REFRESH_MS, useLoad } from "../useLoad";
+import { TodoChip } from "./Chips";
 import { Message } from "./Message";
 
 export function RunPanel() {
@@ -40,9 +41,7 @@ function RunDetails({ run }: Readonly<{ run: Run }>) {
         <ol className="todos" aria-label="The agent's to-do list">
           {run.todos.map((todo, index) => (
             <li key={`${String(index)}-${todo.content}`}>
-              <span className={`chip todo-${todo.status}`}>
-                {todoLabels[todo.status]}
-              </span>
+              <TodoChip status={todo.status} />
               <span>{todo.content}</span>
             </li>
           ))}

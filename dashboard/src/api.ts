@@ -1,9 +1,11 @@
-export type Status =
-  | "waiting"
-  | "in_progress"
-  | "waiting_for_sign_off"
-  | "decided"
-  | "left_for_handler";
+export const statuses = [
+  "waiting",
+  "in_progress",
+  "waiting_for_sign_off",
+  "decided",
+  "left_for_handler",
+] as const;
+export type Status = (typeof statuses)[number];
 export type DecisionKind = "approve" | "decline" | "refer";
 export type TodoStatus = "to_do" | "in_progress" | "done" | "left_for_handler";
 export type StepKind =
@@ -135,7 +137,9 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
-    const body = (await response.json()) as { detail?: unknown };
+    const body = (await response.json().catch(() => ({}))) as {
+      detail?: unknown;
+    };
     const detail =
       typeof body.detail === "string" ? body.detail : "The request failed";
     throw new ApiError(response.status, detail);

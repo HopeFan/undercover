@@ -1,18 +1,10 @@
 import { Link } from "react-router";
-import { api, type Status } from "../api";
+import { api, statuses } from "../api";
 import { DecisionChip, StatusChip } from "../components/Chips";
 import { Message } from "../components/Message";
 import { RunPanel } from "../components/RunPanel";
 import { date, label, money, statusLabels } from "../format";
 import { REFRESH_MS, useLoad } from "../useLoad";
-
-const states: Status[] = [
-  "waiting",
-  "in_progress",
-  "waiting_for_sign_off",
-  "decided",
-  "left_for_handler",
-];
 
 export function QueuePage() {
   const { data: claims, error } = useLoad(api.listClaims, REFRESH_MS);
@@ -22,7 +14,7 @@ export function QueuePage() {
     <>
       <h1>Claims queue</h1>
       <section className="tiles" aria-label="Claims by state">
-        {states.map((status) => {
+        {statuses.map((status) => {
           const count = claims.filter((c) => c.status === status).length;
           return (
             <div

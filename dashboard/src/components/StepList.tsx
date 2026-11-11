@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { type ReactNode, useCallback } from "react";
 import { api, type Step } from "../api";
 import { time } from "../format";
 import { REFRESH_MS, useLoad } from "../useLoad";
@@ -51,14 +51,7 @@ function StepBody({ step }: Readonly<{ step: Step }>) {
     );
   if (step.kind === "read") {
     const [heading, ...text] = step.content.split("\n\n");
-    return (
-      <details>
-        <summary>
-          <span className="step-label">Read</span> {heading}
-        </summary>
-        <pre className="step-result">{text.join("\n\n")}</pre>
-      </details>
-    );
+    return <Folded label="Read" summary={heading} text={text.join("\n\n")} />;
   }
   if (step.kind === "tool_result") {
     const summary =
@@ -66,18 +59,31 @@ function StepBody({ step }: Readonly<{ step: Step }>) {
         ? `${step.content.slice(0, SUMMARY_LENGTH)}...`
         : step.content;
     return (
-      <details>
-        <summary>
-          <span className="step-label">Result</span>{" "}
-          <code className="mono">{summary}</code>
-        </summary>
-        <pre className="step-result">{step.content}</pre>
-      </details>
+      <Folded
+        label="Result"
+        summary={<code className="mono">{summary}</code>}
+        text={step.content}
+      />
     );
   }
   return (
     <p>
       <span className="step-label">Agent</span> {step.content}
     </p>
+  );
+}
+
+function Folded({
+  label,
+  summary,
+  text,
+}: Readonly<{ label: string; summary: ReactNode; text: string }>) {
+  return (
+    <details>
+      <summary>
+        <span className="step-label">{label}</span> {summary}
+      </summary>
+      <pre className="step-result">{text}</pre>
+    </details>
   );
 }

@@ -3,6 +3,7 @@ a claim to a claim agent. The tools that need the agent's claim or run get it fr
 LangChain's context, never from the model."""
 
 import json
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
@@ -13,6 +14,7 @@ from langchain_core.tools import tool
 from agent import api
 
 Document = Literal["policy_wording", "claims_manual"]
+RESERVING = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -29,15 +31,24 @@ class RunContext:
     """A run of the queue agent: its id, its cap, how to hand a claim to a claim
     agent, and the claims it has started.
 
-    `started` is the one field a tool changes. It lives here rather than in the
-    graph's state because each tool call runs on its own: parallel `work_claim`
-    calls would each read the same snapshot of state and could pass the cap, while
-    this shared list sees every claim as soon as it starts."""
+    `started` is the one field a tool changes, only through `reserve`. It lives
+    here rather than in the graph's state because each tool call runs on its own:
+    parallel `work_claim` calls would each read the same snapshot of state, while
+    this list, behind the RESERVING lock, counts every claim as soon as it starts."""
 
     run_id: str
     cap: int
     claim_worker: Callable[[str], str]
     started: list[str] = field(default_factory=list)
+
+    def reserve(self, claim_id: str) -> bool:
+        """Count a claim against the cap, or say no if the run is full."""
+        with RESERVING:
+            if claim_id not in self.started:
+                if len(self.started) >= self.cap:
+                    return False
+                self.started.append(claim_id)
+            return True
 
 
 class Todo(TypedDict):
@@ -122,10 +133,8 @@ def work_claim(claim_id: str, runtime: ToolRuntime[RunContext]) -> str:
     status = api.get_claim(claim_id)["status"]
     if status != "waiting":
         raise Refused(f"{claim_id} is not waiting, it is {status}.")
-    if claim_id not in run.started:
-        if len(run.started) >= run.cap:
-            raise Refused(f"this run is capped at {run.cap} claims.")
-        run.started.append(claim_id)
+    if not run.reserve(claim_id):
+        raise Refused(f"this run is capped at {run.cap} claims.")
     return run.claim_worker(claim_id)
 
 
